@@ -15,7 +15,7 @@ MANIFEST = (
 
 @pytest.fixture(scope="module")
 def control():
-    return AgentControl.from_path(MANIFEST)
+    return AgentControl.from_path(str(MANIFEST))
 
 
 @pytest.mark.asyncio
@@ -121,4 +121,3 @@ async def test_evidenced_non_demo_ticket_is_allowed(control):
     )
 
     assert result.value["ticket_id"] == "MOCK-0001"
-

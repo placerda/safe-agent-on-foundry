@@ -17,7 +17,7 @@ class AcsFunctionMiddleware(FunctionMiddleware):
     """Use Agent Framework as the policy-enforcement point for ACS."""
 
     def __init__(self, manifest_path: Path = POLICY_MANIFEST) -> None:
-        self._control = AgentControl.from_path(manifest_path)
+        self._control = AgentControl.from_path(str(manifest_path))
 
     async def process(
         self,
@@ -48,4 +48,3 @@ class AcsFunctionMiddleware(FunctionMiddleware):
             return
 
         context.result = guarded.value
-
