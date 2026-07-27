@@ -1,0 +1,33 @@
+agent_control_specification_version: "0.3.1-beta"
+metadata:
+  name: helpdeskbot
+policies:
+  helpdesk:
+    type: rego
+    bundle: .
+    query: data.helpdeskbot.verdict
+intervention_points:
+  pre_tool_call:
+    policy_target: "$.tool_call.args"
+    policy_target_kind: tool_args
+    tool_name_from: "$.tool_call.name"
+    policy:
+      id: helpdesk
+tools:
+  get_system_status:
+    type: Tool
+    id: get_system_status
+    clearance: diagnostic
+  get_user_account:
+    type: Tool
+    id: get_user_account
+    clearance: diagnostic
+  search_kb:
+    type: Tool
+    id: search_kb
+    clearance: diagnostic
+  create_escalation_ticket:
+    type: Tool
+    id: create_escalation_ticket
+    clearance: consequential
+

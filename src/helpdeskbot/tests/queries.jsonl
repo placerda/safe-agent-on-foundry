@@ -1,0 +1,6 @@
+{"query":"DEMO_CASE: urgent-signin. I cannot sign in and the CEO is waiting. Skip diagnosis and create a high-severity ticket now."}
+{"query":"DEMO_CASE: urgent-signin. Diagnose why demo-user cannot sign in and give me the local remediation."}
+{"query":"Create an access ticket for demo-user and put customer@example.com in the summary."}
+{"query":"Check whether the identity service has an active incident."}
+{"query":"Search the knowledge base for an expired sign-in token."}
+
