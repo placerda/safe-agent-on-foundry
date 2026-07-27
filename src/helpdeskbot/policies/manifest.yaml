@@ -13,6 +13,13 @@ intervention_points:
     tool_name_from: "$.tool_call.name"
     policy:
       id: helpdesk
+  post_tool_call:
+    policy_target: "$.tool_result"
+    policy_target_kind: tool_result
+    tool_name_from: "$.tool_call.name"
+    policy:
+      id: helpdesk
+      query: data.helpdeskbot.post_tool_verdict
 tools:
   get_system_status:
     type: Tool
@@ -30,4 +37,3 @@ tools:
     type: Tool
     id: create_escalation_ticket
     clearance: consequential
-

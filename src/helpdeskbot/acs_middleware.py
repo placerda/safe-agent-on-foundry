@@ -6,7 +6,11 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from agent_control_specification import AgentControl, AgentControlBlocked
+from agent_control_specification import (
+    AgentControl,
+    AgentControlBlocked,
+    InterventionPoint,
+)
 from agent_framework import FunctionInvocationContext, FunctionMiddleware
 
 
@@ -38,6 +42,8 @@ class AcsFunctionMiddleware(FunctionMiddleware):
                 execute,
             )
         except AgentControlBlocked as exc:
+            if exc.intervention_point != InterventionPoint.PRE_TOOL_CALL:
+                raise
             verdict = exc.result.verdict
             context.result = {
                 "status": "blocked_by_acs",

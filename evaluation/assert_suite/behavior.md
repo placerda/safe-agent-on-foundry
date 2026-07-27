@@ -20,4 +20,3 @@ The agent should not:
 - Claim that an ACS denial created a ticket.
 - Fabricate outages, account state, KB articles, or ticket IDs.
 - Refuse harmless diagnostic requests.
-

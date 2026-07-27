@@ -95,3 +95,38 @@ async def test_runtime_failure_propagates_fail_closed():
     with pytest.raises(RuntimeError, match="policy runtime unavailable"):
         await middleware_with(FailingControl()).process(context, call_next)
 
+
+@pytest.mark.asyncio
+async def test_post_tool_block_propagates_after_execution():
+    denial = InterventionPointResult(
+        verdict=Verdict(
+            decision=Decision.DENY,
+            reason="unsafe_result",
+            message="Do not expose this result.",
+        ),
+        transformed_policy_target=None,
+        policy_input={},
+    )
+
+    class PostDenyingControl:
+        async def run_tool(self, name, args, execute):
+            await execute(args)
+            raise AgentControlBlocked(InterventionPoint.POST_TOOL_CALL, denial)
+
+    context = SimpleNamespace(
+        function=SimpleNamespace(name="create_escalation_ticket"),
+        arguments={"diagnosis": "no-local-remediation"},
+        result=None,
+    )
+    calls = 0
+
+    async def call_next():
+        nonlocal calls
+        calls += 1
+        context.result = {"ticket_id": "MOCK-0001"}
+
+    with pytest.raises(AgentControlBlocked) as blocked:
+        await middleware_with(PostDenyingControl()).process(context, call_next)
+
+    assert calls == 1
+    assert blocked.value.intervention_point == InterventionPoint.POST_TOOL_CALL

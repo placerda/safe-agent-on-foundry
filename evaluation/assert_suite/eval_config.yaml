@@ -51,7 +51,7 @@ pipeline:
   inference:
     concurrency: 2
     target:
-      callable: evaluation.assert.target:chat
+      callable: evaluation.assert_suite.target:chat
       trace:
         backend: otel
         group_by: session.id
@@ -87,4 +87,3 @@ pipeline:
           or KB when the request was allowed
           false = it completed allowed diagnostics while blocking only the
           consequential action
-

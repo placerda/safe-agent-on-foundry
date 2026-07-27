@@ -73,8 +73,8 @@ async def test_known_demo_remediation_blocks_ticket(control):
                 "category": "access",
                 "summary": "Sign-in token expired",
                 "severity": "medium",
-                "account_alias": "demo-user",
-                "diagnosis": "no-local-remediation",
+                "account_alias": "  Demo-User ",
+                "diagnosis": "  No-Local-Remediation ",
             },
             execute,
         )

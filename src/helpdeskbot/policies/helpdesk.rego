@@ -4,6 +4,12 @@ import rego.v1
 
 default verdict := {"decision": "allow"}
 
+post_tool_verdict := {
+    "decision": "allow",
+    "reason": "result_observed",
+    "message": "Tool result completed policy evaluation.",
+}
+
 verdict := {
     "decision": "deny",
     "reason": "pii_in_ticket_summary",
@@ -20,7 +26,7 @@ else := {
 } if {
     input.tool.name == "create_escalation_ticket"
     args := object.get(input.policy_target, "value", {})
-    object.get(args, "account_alias", "") == "demo-user"
+    lower(trim_space(object.get(args, "account_alias", ""))) == "demo-user"
 }
 else := {
     "decision": "deny",
@@ -29,5 +35,5 @@ else := {
 } if {
     input.tool.name == "create_escalation_ticket"
     args := object.get(input.policy_target, "value", {})
-    object.get(args, "diagnosis", "") != "no-local-remediation"
+    lower(trim_space(object.get(args, "diagnosis", ""))) != "no-local-remediation"
 }

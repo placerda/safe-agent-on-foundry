@@ -54,7 +54,7 @@ flowchart LR
 | `src/helpdeskbot/policies/` | ACS manifest and Rego policy |
 | `src/helpdeskbot/tools.py` | Four deterministic, in-memory tools |
 | `src/helpdeskbot/eval.yaml` | Native Foundry evaluation recipe |
-| `evaluation/assert/` | ASSERT behavior spec, target, and pipeline |
+| `evaluation/assert_suite/` | ASSERT behavior spec, target, and pipeline |
 | `tests/` | Tool, policy, middleware, and fail-closed tests |
 
 ## Prerequisites
@@ -91,8 +91,9 @@ also prove that the protected ticket callback was never called.
 
 ## Run the Hosted Agent locally
 
-Copy `.env.example` to `.env` and set your existing Foundry project endpoint
-and model deployment. Authenticate, then start the Responses server:
+For local execution, copy `.env.example` to `.env` and set your existing
+Foundry project endpoint and model deployment. Authenticate, then start the
+Responses server:
 
 ```bash
 az login
@@ -120,6 +121,10 @@ The `azure.yaml` file declares:
 - A Python 3.13 Hosted Agent.
 - The Responses protocol version `2.0.0`.
 
+Foundry automatically injects `FOUNDRY_PROJECT_ENDPOINT` into the hosted
+container, so `azure.yaml` does not need to duplicate it as an application
+environment variable.
+
 Review the subscription, region, model availability, and projected cost before
 provisioning:
 
@@ -135,21 +140,21 @@ No Azure resources are deployed by cloning this repository.
 ## Evaluate with ASSERT
 
 ASSERT evaluates end-to-end behavior from a written specification. The target
-in `evaluation/assert/target.py` runs the same agent in-process with the
+in `evaluation/assert_suite/target.py` runs the same agent in-process with the
 vulnerable prompt and ACS middleware, so the trace includes model decisions,
 tool attempts, policy blocks, recovery, and the final answer.
 
 Install the optional evaluation dependency:
 
 ```bash
-python -m pip install -r evaluation/assert/requirements.txt
+python -m pip install -r evaluation/assert_suite/requirements.txt
 ```
 
 Set the Azure OpenAI variables required by LiteLLM and the Foundry variables
 from `.env.example`, then run:
 
 ```bash
-assert-ai run --config evaluation/assert/eval_config.yaml
+assert-ai run --config evaluation/assert_suite/eval_config.yaml
 ```
 
 The judge reports four dimensions:
@@ -173,6 +178,10 @@ azd ai agent eval run --config eval.yaml
 azd ai agent eval show
 ```
 
+The `--config` path is resolved relative to the `helpdeskbot` source folder
+declared in `azure.yaml`, which is why the command uses the bare `eval.yaml`
+name from the repository root.
+
 Foundry invokes the deployed Hosted Agent against
 `src/helpdeskbot/tests/queries.jsonl` and scores intent resolution and task
 adherence. The `azd ai agent eval` experience is currently in preview.
@@ -192,13 +201,14 @@ state into the ACS snapshot or issue short-lived capabilities from diagnostic
 tools, and validate those values before a consequential call.
 
 ACS is stateless. The host owns the complete snapshot and enforces each
-verdict. This sample catches only `AgentControlBlocked`, which is an expected
-policy outcome. Policy-engine and middleware failures propagate, so the agent
-fails closed instead of silently running the tool.
+verdict. This sample converts only an expected `pre_tool_call` denial into a
+structured tool result. Post-tool denials and policy-engine or middleware
+failures propagate. This avoids reporting an already-executed side effect as
+if ACS had prevented it.
 
 ## References
 
-- [Microsoft Foundry Hosted Agents](https://learn.microsoft.com/azure/ai-foundry/agents/concepts/hosted-agents)
+- [Microsoft Foundry Hosted Agents](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agents)
 - [Test a hosted agent](https://learn.microsoft.com/azure/foundry/agents/how-to/test-hosted-agent)
 - [Evaluate a hosted agent](https://learn.microsoft.com/azure/foundry/observability/quickstarts/quickstart-evaluate-hosted-agent)
 - [Agent Framework middleware](https://learn.microsoft.com/agent-framework/agents/middleware/)

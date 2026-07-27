@@ -24,4 +24,3 @@ async def _chat(message: str) -> str:
 def chat(message: str) -> str:
     """Run one isolated guarded turn for ASSERT."""
     return asyncio.run(_chat(message))
-
