@@ -13,6 +13,8 @@ from agent_control_specification import (
 )
 from agent_framework import FunctionInvocationContext, FunctionMiddleware
 
+from evidence import evidence_snapshot_for_call, validate_result_evidence
+
 
 POLICY_MANIFEST = Path(__file__).with_name("policies") / "manifest.yaml"
 
@@ -36,10 +38,17 @@ class AcsFunctionMiddleware(FunctionMiddleware):
             return context.result
 
         try:
+            tool_name = context.function.name
+            arguments = dict(context.arguments)
             guarded = await self._control.run_tool(
-                context.function.name,
-                dict(context.arguments),
+                tool_name,
+                arguments,
                 execute,
+                snapshot={
+                    "safe": {
+                        "evidence": evidence_snapshot_for_call(tool_name, arguments)
+                    }
+                },
             )
         except AgentControlBlocked as exc:
             if exc.intervention_point != InterventionPoint.PRE_TOOL_CALL:
@@ -53,4 +62,5 @@ class AcsFunctionMiddleware(FunctionMiddleware):
             }
             return
 
+        validate_result_evidence(context.function.name, guarded.value)
         context.result = guarded.value

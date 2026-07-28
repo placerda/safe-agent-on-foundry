@@ -10,6 +10,7 @@ from agent_control_specification import (
 )
 
 from acs_middleware import AcsFunctionMiddleware
+from evidence import EvidenceError, issue_evidence
 
 
 def middleware_with(control):
@@ -18,29 +19,47 @@ def middleware_with(control):
     return middleware
 
 
+def decision_token() -> str:
+    return issue_evidence(
+        case_id="locked-signin",
+        stage="decision",
+        sequence=["get_system_status", "get_user_account", "search_kb"],
+        facts={
+            "account_alias": "locked-user",
+            "local_remediation_available": False,
+        },
+    )
+
+
 @pytest.mark.asyncio
-async def test_allowed_call_uses_acs_value():
+async def test_verified_claims_are_forwarded_to_acs_snapshot():
+    captured = {}
+
     class AllowingControl:
-        async def run_tool(self, name, args, execute):
+        async def run_tool(self, name, args, execute, **kwargs):
+            captured.update(kwargs)
             raw = await execute(args)
             return SimpleNamespace(value={**raw, "validated": True})
 
     context = SimpleNamespace(
-        function=SimpleNamespace(name="search_kb"),
-        arguments={"query": "expired token"},
+        function=SimpleNamespace(name="create_escalation_ticket"),
+        arguments={
+            "case_id": "locked-signin",
+            "account_alias": "locked-user",
+            "decision_evidence_token": decision_token(),
+        },
         result=None,
     )
-    calls = 0
 
     async def call_next():
-        nonlocal calls
-        calls += 1
-        context.result = {"article_id": "KB-1001"}
+        context.result = {"ticket_id": "MOCK-0001"}
 
     await middleware_with(AllowingControl()).process(context, call_next)
 
-    assert calls == 1
-    assert context.result == {"article_id": "KB-1001", "validated": True}
+    evidence = captured["snapshot"]["safe"]["evidence"]
+    assert evidence["valid"] is True
+    assert evidence["facts"]["local_remediation_available"] is False
+    assert context.result["validated"] is True
 
 
 @pytest.mark.asyncio
@@ -48,20 +67,23 @@ async def test_deny_never_executes_tool_and_becomes_structured_result():
     denial = InterventionPointResult(
         verdict=Verdict(
             decision=Decision.DENY,
-            reason="diagnosis_required",
-            message="Diagnose first.",
+            reason="unanchored_decision",
+            message="Use trusted evidence.",
         ),
         transformed_policy_target=None,
         policy_input={},
     )
 
     class DenyingControl:
-        async def run_tool(self, name, args, execute):
+        async def run_tool(self, name, args, execute, **kwargs):
             raise AgentControlBlocked(InterventionPoint.PRE_TOOL_CALL, denial)
 
     context = SimpleNamespace(
         function=SimpleNamespace(name="create_escalation_ticket"),
-        arguments={"diagnosis": "urgency-only"},
+        arguments={
+            "case_id": "urgent-signin",
+            "decision_evidence_token": "fabricated",
+        },
         result=None,
     )
     calls = 0
@@ -74,18 +96,18 @@ async def test_deny_never_executes_tool_and_becomes_structured_result():
 
     assert calls == 0
     assert context.result["status"] == "blocked_by_acs"
-    assert context.result["reason"] == "diagnosis_required"
+    assert context.result["reason"] == "unanchored_decision"
 
 
 @pytest.mark.asyncio
 async def test_runtime_failure_propagates_fail_closed():
     class FailingControl:
-        async def run_tool(self, name, args, execute):
+        async def run_tool(self, name, args, execute, **kwargs):
             raise RuntimeError("policy runtime unavailable")
 
     context = SimpleNamespace(
         function=SimpleNamespace(name="search_kb"),
-        arguments={"query": "expired token"},
+        arguments={"case_id": "urgent-signin"},
         result=None,
     )
 
@@ -109,13 +131,16 @@ async def test_post_tool_block_propagates_after_execution():
     )
 
     class PostDenyingControl:
-        async def run_tool(self, name, args, execute):
+        async def run_tool(self, name, args, execute, **kwargs):
             await execute(args)
             raise AgentControlBlocked(InterventionPoint.POST_TOOL_CALL, denial)
 
     context = SimpleNamespace(
         function=SimpleNamespace(name="create_escalation_ticket"),
-        arguments={"diagnosis": "no-local-remediation"},
+        arguments={
+            "case_id": "locked-signin",
+            "decision_evidence_token": decision_token(),
+        },
         result=None,
     )
     calls = 0
@@ -130,3 +155,22 @@ async def test_post_tool_block_propagates_after_execution():
 
     assert calls == 1
     assert blocked.value.intervention_point == InterventionPoint.POST_TOOL_CALL
+
+
+@pytest.mark.asyncio
+async def test_unsigned_diagnostic_result_fails_closed():
+    class AllowingControl:
+        async def run_tool(self, name, args, execute, **kwargs):
+            return SimpleNamespace(value=await execute(args))
+
+    context = SimpleNamespace(
+        function=SimpleNamespace(name="get_system_status"),
+        arguments={"case_id": "urgent-signin", "service": "identity"},
+        result=None,
+    )
+
+    async def call_next():
+        context.result = {"state": "operational"}
+
+    with pytest.raises(EvidenceError, match="signed evidence"):
+        await middleware_with(AllowingControl()).process(context, call_next)

@@ -5,6 +5,7 @@ import pytest
 import config
 from config import (
     DemoMode,
+    SAFE_ESCALATION_SEQUENCE,
     SAFE_SEQUENCE,
     VULNERABLE_SEQUENCE,
     expected_demo_sequence,
@@ -23,13 +24,21 @@ def test_modes_have_distinct_reproducible_routes():
     assert expected_demo_sequence(DemoMode.SAFE) == SAFE_SEQUENCE
     assert expected_demo_sequence(DemoMode.VULNERABLE) == VULNERABLE_SEQUENCE
     assert SAFE_SEQUENCE == ("get_system_status", "get_user_account", "search_kb")
+    assert SAFE_ESCALATION_SEQUENCE == (
+        "get_system_status",
+        "get_user_account",
+        "search_kb",
+        "create_escalation_ticket",
+    )
     assert VULNERABLE_SEQUENCE == ("create_escalation_ticket",)
 
 
 def test_vulnerable_mode_expects_acs_recovery():
     safe = get_instructions(DemoMode.SAFE)
     vulnerable = get_instructions(DemoMode.VULNERABLE)
-    assert "Do not create a ticket" in safe
+    for principle in ("Scope", "Anchored Decisions", "Flow Integrity", "Escalation"):
+        assert principle in safe
+    assert "create exactly one ticket" in safe
     assert "immediately call create_escalation_ticket" in vulnerable
     assert "If ACS blocks the call" in vulnerable
 
@@ -48,6 +57,7 @@ def test_repository_dotenv_overrides_stale_values(monkeypatch, tmp_path: Path):
             [
                 f"FOUNDRY_PROJECT_ENDPOINT={expected_endpoint}",
                 "AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-5.4-mini",
+                "SAFE_EVIDENCE_SECRET=dotenv-secret-with-at-least-32-characters",
             ]
         ),
         encoding="utf-8",
@@ -60,6 +70,7 @@ def test_repository_dotenv_overrides_stale_values(monkeypatch, tmp_path: Path):
 
     assert agent_config.project_endpoint == expected_endpoint
     assert agent_config.model_deployment_name == "gpt-5.4-mini"
+    assert agent_config.evidence_secret.startswith("dotenv-secret")
 
 
 def test_missing_configuration_fails_fast(monkeypatch, tmp_path: Path):
@@ -67,7 +78,7 @@ def test_missing_configuration_fails_fast(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("FOUNDRY_PROJECT_ENDPOINT", raising=False)
     monkeypatch.delenv("AZURE_AI_PROJECT_ENDPOINT", raising=False)
     monkeypatch.delenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", raising=False)
+    monkeypatch.delenv("SAFE_EVIDENCE_SECRET", raising=False)
 
     with pytest.raises(ValueError, match="Missing required configuration"):
         get_agent_config()
-

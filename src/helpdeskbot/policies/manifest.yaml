@@ -1,6 +1,7 @@
 agent_control_specification_version: "0.3.1-beta"
 metadata:
   name: helpdeskbot
+  description: SAFE enforcement for scope, evidence, flow, and escalation.
 policies:
   helpdesk:
     type: rego

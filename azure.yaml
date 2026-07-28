@@ -35,6 +35,8 @@ services:
         value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
       - name: HELPDESKBOT_MODE
         value: ${HELPDESKBOT_MODE:=safe}
+      - name: SAFE_EVIDENCE_SECRET
+        value: ${SAFE_EVIDENCE_SECRET}
       - name: OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
         value: ${OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT:=false}
     kind: hosted
@@ -51,4 +53,3 @@ services:
         version: 2.0.0
 infra:
   provider: microsoft.foundry
-
