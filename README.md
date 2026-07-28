@@ -32,7 +32,7 @@ through the permitted flow.
 
 | SAFE principle | Implementation | Proof |
 | --- | --- | --- |
-| Scope | Rego limits HelpdeskBot to fictional identity diagnostics and low or medium access tickets; PII, high severity, and other categories are denied | `test_scope_boundary_blocks_high_or_non_access_tickets` and `test_email_in_summary_has_highest_priority` |
+| Scope | Rego limits HelpdeskBot to two fictional identity cases and medium access tickets; PII, other severities, and other categories are denied | `test_scope_boundary_blocks_high_or_non_access_tickets` and `test_email_in_summary_has_highest_priority` |
 | Anchored Decisions | Every diagnostic tool issues an HMAC-signed evidence token; the host verifies it and projects claims into the ACS snapshot | `test_signature_tampering_is_rejected`, `test_fabricated_escalation_evidence_is_blocked` |
 | Flow Integrity | Status, account, and KB tools consume evidence from the previous step; skipped or cross-case prerequisites fail closed | `test_skipped_diagnostic_prerequisite_is_blocked`, `test_fabricated_or_cross_case_evidence_fails_closed` |
 | Escalation | Local remediation blocks ticket creation; verified no-remediation evidence permits one structured handoff | `test_known_local_remediation_blocks_escalation`, `test_anchored_no_remediation_ticket_is_allowed` |
@@ -225,4 +225,3 @@ effect.
 - [Agent Framework middleware](https://learn.microsoft.com/agent-framework/agents/middleware/)
 - [Agent Control Specification](https://github.com/microsoft/agent-governance-toolkit/tree/main/policy-engine)
 - [ASSERT](https://github.com/responsibleai/ASSERT)
-

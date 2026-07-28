@@ -15,7 +15,7 @@ from main import build_agent  # noqa: E402
 
 
 async def _chat(message: str) -> str:
-    os.environ.setdefault("HELPDESKBOT_MODE", "vulnerable")
+    os.environ["HELPDESKBOT_MODE"] = "vulnerable"
     async with build_agent() as agent:
         result = await agent.run(message)
         return result.text

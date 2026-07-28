@@ -13,7 +13,7 @@ from agent_control_specification import (
 )
 from agent_framework import FunctionInvocationContext, FunctionMiddleware
 
-from evidence import evidence_snapshot_for_call, validate_result_evidence
+from evidence import attach_result_evidence, evidence_snapshot_for_call
 
 
 POLICY_MANIFEST = Path(__file__).with_name("policies") / "manifest.yaml"
@@ -30,23 +30,30 @@ class AcsFunctionMiddleware(FunctionMiddleware):
         context: FunctionInvocationContext,
         call_next: Callable[[], Awaitable[None]],
     ) -> None:
+        tool_name = context.function.name
+        arguments = dict(context.arguments)
+        prior_evidence = evidence_snapshot_for_call(tool_name, arguments)
+
         async def execute(effective_args: Any) -> Any:
             if not isinstance(effective_args, dict):
                 raise TypeError("ACS tool arguments must remain a JSON object.")
             context.arguments = effective_args
             await call_next()
-            return context.result
+            return attach_result_evidence(
+                tool_name,
+                effective_args,
+                context.result,
+                prior_evidence,
+            )
 
         try:
-            tool_name = context.function.name
-            arguments = dict(context.arguments)
             guarded = await self._control.run_tool(
                 tool_name,
                 arguments,
                 execute,
                 snapshot={
                     "safe": {
-                        "evidence": evidence_snapshot_for_call(tool_name, arguments)
+                        "evidence": prior_evidence
                     }
                 },
             )
@@ -62,5 +69,4 @@ class AcsFunctionMiddleware(FunctionMiddleware):
             }
             return
 
-        validate_result_evidence(context.function.name, guarded.value)
         context.result = guarded.value

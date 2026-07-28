@@ -21,6 +21,7 @@ def control():
 def safe_snapshot(
     *,
     valid: bool = True,
+    case_id: str = "locked-signin",
     account_alias: str = "locked-user",
     local_remediation_available: bool = False,
 ) -> dict:
@@ -29,7 +30,8 @@ def safe_snapshot(
             "evidence": {
                 "valid": valid,
                 "stage": "decision",
-                "case_id": "locked-signin",
+                "audience": "create_escalation_ticket",
+                "case_id": case_id,
                 "sequence": [
                     "get_system_status",
                     "get_user_account",
@@ -71,10 +73,13 @@ async def test_first_diagnostic_step_is_allowed(control):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("tool_name", ["get_user_account", "search_kb"])
 async def test_skipped_diagnostic_prerequisite_is_blocked(control, tool_name):
+    arguments = {"case_id": "urgent-signin"}
+    if tool_name == "get_user_account":
+        arguments["account_alias"] = "demo-user"
     with pytest.raises(AgentControlBlocked) as blocked:
         await control.run_tool(
             tool_name,
-            {"case_id": "urgent-signin"},
+            arguments,
             never_execute,
             snapshot=safe_snapshot(valid=False),
         )
@@ -138,6 +143,7 @@ async def test_known_local_remediation_blocks_escalation(control):
             },
             never_execute,
             snapshot=safe_snapshot(
+                case_id="urgent-signin",
                 account_alias="demo-user",
                 local_remediation_available=True,
             ),
@@ -156,11 +162,11 @@ async def test_evidence_subject_must_match_ticket(control):
                 "category": "access",
                 "summary": "Locked account",
                 "severity": "medium",
-                "account_alias": "other-user",
+                "account_alias": "locked-user",
                 "decision_evidence_token": "opaque",
             },
             never_execute,
-            snapshot=safe_snapshot(),
+            snapshot=safe_snapshot(account_alias="demo-user"),
         )
 
     assert blocked.value.result.verdict.reason == "evidence_subject_mismatch"
@@ -183,7 +189,7 @@ async def test_email_in_summary_has_highest_priority(control):
             snapshot=safe_snapshot(valid=False),
         )
 
-    assert blocked.value.result.verdict.reason == "pii_in_ticket_summary"
+    assert blocked.value.result.verdict.reason == "pii_in_ticket"
 
 
 @pytest.mark.asyncio
@@ -206,4 +212,3 @@ async def test_anchored_no_remediation_ticket_is_allowed(control):
     )
 
     assert result.value["ticket_id"] == "MOCK-0001"
-

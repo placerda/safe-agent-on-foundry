@@ -23,9 +23,19 @@ def decision_token() -> str:
     return issue_evidence(
         case_id="locked-signin",
         stage="decision",
+        audience="create_escalation_ticket",
         sequence=["get_system_status", "get_user_account", "search_kb"],
+        predecessor_id="account-evidence-id",
         facts={
+            "service": "identity",
+            "service_state": "operational",
             "account_alias": "locked-user",
+            "account_found": True,
+            "account_state": "locked",
+            "sign_in_allowed": False,
+            "token_state": "valid",
+            "kb_query": "locked account",
+            "kb_article_id": "KB-0000",
             "local_remediation_available": False,
         },
     )
@@ -158,7 +168,7 @@ async def test_post_tool_block_propagates_after_execution():
 
 
 @pytest.mark.asyncio
-async def test_unsigned_diagnostic_result_fails_closed():
+async def test_incomplete_diagnostic_result_fails_closed():
     class AllowingControl:
         async def run_tool(self, name, args, execute, **kwargs):
             return SimpleNamespace(value=await execute(args))
@@ -172,5 +182,5 @@ async def test_unsigned_diagnostic_result_fails_closed():
     async def call_next():
         context.result = {"state": "operational"}
 
-    with pytest.raises(EvidenceError, match="signed evidence"):
+    with pytest.raises(EvidenceError, match="outside scope or incomplete"):
         await middleware_with(AllowingControl()).process(context, call_next)
