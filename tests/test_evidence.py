@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from evidence import (
@@ -5,6 +7,7 @@ from evidence import (
     attach_result_evidence,
     evidence_snapshot_for_call,
     issue_evidence,
+    resolve_evidence_reference,
     verify_evidence,
 )
 
@@ -147,7 +150,7 @@ def test_host_issues_complete_chained_evidence_from_raw_results():
     )
 
     claims = verify_evidence(
-        decision["evidence_token"],
+        resolve_evidence_reference(decision["evidence_token"]),
         expected_case_id="locked-signin",
         expected_stage="decision",
         expected_audience="create_escalation_ticket",
@@ -155,6 +158,57 @@ def test_host_issues_complete_chained_evidence_from_raw_results():
     )
     assert claims["predecessor_id"] == kb_prior["evidence_id"]
     assert claims["facts"]["local_remediation_available"] is False
+
+
+def test_host_accepts_framework_serialized_tool_object():
+    result = attach_result_evidence(
+        "get_system_status",
+        {"case_id": "urgent-signin", "service": "identity"},
+        '{"service":"identity","state":"operational"}',
+        {},
+    )
+
+    assert result["state"] == "operational"
+    assert result["evidence_token"].startswith("ev:")
+    assert (
+        verify_evidence(resolve_evidence_reference(result["evidence_token"]))["stage"]
+        == "system_status"
+    )
+
+
+def test_host_accepts_framework_content_wrapper():
+    result = attach_result_evidence(
+        "get_system_status",
+        {"case_id": "urgent-signin", "service": "identity"},
+        [SimpleNamespace(text='{"service":"identity","state":"operational"}')],
+        {},
+    )
+
+    assert result["state"] == "operational"
+    assert (
+        verify_evidence(resolve_evidence_reference(result["evidence_token"]))["stage"]
+        == "system_status"
+    )
+
+
+def test_host_accepts_framework_function_result_wrapper():
+    result = attach_result_evidence(
+        "get_system_status",
+        {"case_id": "urgent-signin", "service": "identity"},
+        [
+            SimpleNamespace(
+                text=None,
+                result={"service": "identity", "state": "operational"},
+            )
+        ],
+        {},
+    )
+
+    assert result["state"] == "operational"
+    assert (
+        verify_evidence(resolve_evidence_reference(result["evidence_token"]))["stage"]
+        == "system_status"
+    )
 
 
 def test_host_rejects_result_that_changes_the_evidence_subject():
@@ -186,4 +240,3 @@ def test_host_rejects_result_that_changes_the_evidence_subject():
             },
             prior,
         )
-

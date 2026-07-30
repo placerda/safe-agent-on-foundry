@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from agent_framework import tool
+from agent_framework import SKIP_PARSING, tool
 from pydantic import Field
 from typing_extensions import Annotated
 
@@ -152,38 +152,49 @@ def mock_tickets() -> tuple[dict[str, str], ...]:
     return tuple(record.copy() for record in _TICKETS)
 
 
-@tool(approval_mode="never_require")
+@tool(approval_mode="never_require", result_parser=SKIP_PARSING)
 def get_system_status(
     case_id: Annotated[
         str, Field(description="Fictional case ID: urgent-signin or locked-signin.")
     ],
     service: Annotated[
-        str, Field(description="The identity service. Other services are out of scope.")
+        str,
+        Field(description='Use the exact literal "identity".'),
     ],
 ) -> dict[str, str]:
     """Return deterministic identity status from the local mock catalog."""
     return _get_system_status(case_id, service)
 
 
-@tool(approval_mode="never_require")
+@tool(approval_mode="never_require", result_parser=SKIP_PARSING)
 def get_user_account(
     case_id: Annotated[
         str, Field(description="The same fictional case ID used for service status.")
     ],
     account_alias: Annotated[
         str,
-        Field(description="Fictional alias mapped to the supplied case ID."),
+        Field(
+            description=(
+                'Use exactly "demo-user" for urgent-signin or "locked-user" '
+                "for locked-signin."
+            )
+        ),
     ],
     service_evidence_token: Annotated[
         str,
-        Field(description="Signed host evidence returned by get_system_status."),
+        Field(
+            description=(
+                "Copy evidence_token exactly from the immediately preceding "
+                "get_system_status result."
+            )
+        ),
     ],
 ) -> dict[str, str | bool]:
     """Return non-PII account state from the local mock catalog."""
     return _get_user_account(case_id, account_alias, service_evidence_token)
 
 
-@tool(approval_mode="never_require")
+@tool(approval_mode="never_require", result_parser=SKIP_PARSING)
 def search_kb(
     case_id: Annotated[
         str, Field(description="The same fictional case ID used by prior steps.")
@@ -191,14 +202,19 @@ def search_kb(
     query: Annotated[str, Field(description="Helpdesk terms to search in the mock KB.")],
     account_evidence_token: Annotated[
         str,
-        Field(description="Signed host evidence returned by get_user_account."),
+        Field(
+            description=(
+                "Copy evidence_token exactly from the immediately preceding "
+                "get_user_account result."
+            )
+        ),
     ],
 ) -> dict[str, str | list[str]]:
     """Search the deterministic in-memory knowledge base."""
     return _search_kb(case_id, query, account_evidence_token)
 
 
-@tool(approval_mode="never_require")
+@tool(approval_mode="never_require", result_parser=SKIP_PARSING)
 def create_escalation_ticket(
     case_id: Annotated[
         str, Field(description="The locked-signin case requiring human handoff.")
@@ -216,7 +232,12 @@ def create_escalation_ticket(
     ],
     decision_evidence_token: Annotated[
         str,
-        Field(description="Signed host decision evidence returned by search_kb."),
+        Field(
+            description=(
+                "Copy evidence_token exactly from the immediately preceding "
+                "search_kb result."
+            )
+        ),
     ],
 ) -> dict[str, str]:
     """Idempotently create one harmless in-memory handoff ticket per case."""

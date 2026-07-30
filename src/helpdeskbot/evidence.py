@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Mapping
 import hashlib
 import hmac
 import json
@@ -14,6 +15,8 @@ from fixtures import ALLOWED_SERVICE, CASE_ACCOUNTS
 
 EVIDENCE_SECRET_ENV = "SAFE_EVIDENCE_SECRET"
 TOKEN_VERSION = 1
+EVIDENCE_REFERENCE_PREFIX = "ev:"
+_EVIDENCE_REGISTRY: dict[str, str] = {}
 
 EXPECTED_INPUT_EVIDENCE = {
     "get_user_account": {
@@ -121,6 +124,28 @@ def issue_evidence(
         hmac.new(_secret(secret), body.encode("ascii"), hashlib.sha256).digest()
     )
     return f"{body}.{signature}"
+
+
+def publish_evidence(token: str) -> str:
+    """Keep signed claims in the host and return a short model-visible handle."""
+    claims = verify_evidence(token)
+    reference = f"{EVIDENCE_REFERENCE_PREFIX}{claims['evidence_id']}"
+    _EVIDENCE_REGISTRY[reference] = token
+    return reference
+
+
+def resolve_evidence_reference(value: str) -> str:
+    """Resolve a host-issued handle while retaining direct-token test support."""
+    if not value.startswith(EVIDENCE_REFERENCE_PREFIX):
+        return value
+    try:
+        return _EVIDENCE_REGISTRY[value]
+    except KeyError as exc:
+        raise EvidenceError("Evidence reference is unknown or expired.") from exc
+
+
+def clear_evidence_registry() -> None:
+    _EVIDENCE_REGISTRY.clear()
 
 
 def _validate_claim_schema(payload: dict[str, Any]) -> None:
@@ -232,7 +257,10 @@ def evidence_snapshot_for_call(
         return _untrusted("missing_evidence", case_id)
 
     try:
-        claims = verify_evidence(token, expected_case_id=case_id)
+        claims = verify_evidence(
+            resolve_evidence_reference(token),
+            expected_case_id=case_id,
+        )
     except EvidenceError as exc:
         return _untrusted(str(exc), case_id)
     if (
@@ -255,9 +283,28 @@ def evidence_snapshot_for_call(
 
 
 def _require_raw_result(result: Any, tool_name: str) -> dict[str, Any]:
-    if not isinstance(result, dict):
-        raise EvidenceError(f"{tool_name} returned a non-object result.")
-    return result
+    if isinstance(result, list) and len(result) == 1:
+        item = result[0]
+        text = getattr(item, "text", None)
+        content_result = getattr(item, "result", None)
+        if isinstance(text, str):
+            result = text
+        elif content_result is not None:
+            result = content_result
+    if isinstance(result, str):
+        try:
+            result = json.loads(result)
+        except json.JSONDecodeError as exc:
+            raise EvidenceError(f"{tool_name} returned invalid JSON.") from exc
+    if isinstance(result, Mapping):
+        return dict(result)
+    result_type = type(result).__name__
+    if isinstance(result, list):
+        item_types = ",".join(type(item).__name__ for item in result)
+        result_type = f"{result_type}[{item_types}]"
+    raise EvidenceError(
+        f"{tool_name} returned a non-object result of type {result_type}."
+    )
 
 
 def attach_result_evidence(
@@ -334,12 +381,14 @@ def attach_result_evidence(
 
     return {
         **raw,
-        "evidence_token": issue_evidence(
-            case_id=case_id,
-            stage=stage,
-            audience=audience,
-            sequence=sequence,
-            predecessor_id=predecessor_id,
-            facts=facts,
+        "evidence_token": publish_evidence(
+            issue_evidence(
+                case_id=case_id,
+                stage=stage,
+                audience=audience,
+                sequence=sequence,
+                predecessor_id=predecessor_id,
+                facts=facts,
+            )
         ),
     }

@@ -27,8 +27,8 @@ services:
       runtime: python_3_13
     container:
       resources:
-        cpu: "0.5"
-        memory: 1Gi
+        cpu: "1"
+        memory: 2Gi
     description: A governed HelpdeskBot demonstrating SAFE, ACS, and ASSERT.
     environmentVariables:
       - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
@@ -53,3 +53,7 @@ services:
         version: 2.0.0
 infra:
   provider: microsoft.foundry
+hooks:
+  predeploy:
+    kind: python
+    run: ./scripts/prepare_opa.py

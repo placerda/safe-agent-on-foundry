@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -9,7 +10,7 @@ from agent_control_specification import (
     Verdict,
 )
 
-from acs_middleware import AcsFunctionMiddleware
+from acs_middleware import AcsFunctionMiddleware, _configure_bundled_opa
 from evidence import EvidenceError, issue_evidence
 
 
@@ -17,6 +18,21 @@ def middleware_with(control):
     middleware = AcsFunctionMiddleware.__new__(AcsFunctionMiddleware)
     middleware._control = control
     return middleware
+
+
+def test_bundled_opa_is_added_to_path(monkeypatch, tmp_path):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    opa = bundle / "opa"
+    opa.write_bytes(b"test")
+    monkeypatch.setenv("PATH", os.pathsep.join(("existing", "path")))
+    runtime_dir = tmp_path / "runtime"
+
+    runtime_opa = _configure_bundled_opa(opa, runtime_dir)
+
+    assert runtime_opa == runtime_dir / "opa"
+    assert runtime_opa.read_bytes() == b"test"
+    assert os.environ["PATH"].split(os.pathsep)[0] == str(runtime_dir)
 
 
 def decision_token() -> str:

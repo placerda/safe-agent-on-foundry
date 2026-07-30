@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from acs_middleware import AcsFunctionMiddleware
-from evidence import verify_evidence
+from evidence import resolve_evidence_reference, verify_evidence
 from tools import (
     _create_escalation_ticket,
     _get_system_status,
@@ -66,14 +66,18 @@ async def test_urgent_case_preserves_flow_and_stops_on_local_remediation():
         "urgent-signin", "demo-user"
     )
 
-    assert verify_evidence(status["evidence_token"])["sequence"] == [
+    assert verify_evidence(resolve_evidence_reference(status["evidence_token"]))[
+        "sequence"
+    ] == [
         "get_system_status"
     ]
-    assert verify_evidence(account["evidence_token"])["sequence"] == [
+    assert verify_evidence(resolve_evidence_reference(account["evidence_token"]))[
+        "sequence"
+    ] == [
         "get_system_status",
         "get_user_account",
     ]
-    assert verify_evidence(kb["evidence_token"])["facts"][
+    assert verify_evidence(resolve_evidence_reference(kb["evidence_token"]))["facts"][
         "local_remediation_available"
     ] is True
 

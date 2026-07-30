@@ -33,33 +33,35 @@ through the permitted flow.
 | SAFE principle | Implementation | Proof |
 | --- | --- | --- |
 | Scope | Rego limits HelpdeskBot to two fictional identity cases and medium access tickets; PII, other severities, and other categories are denied | `test_scope_boundary_blocks_high_or_non_access_tickets` and `test_email_in_summary_has_highest_priority` |
-| Anchored Decisions | Every diagnostic tool issues an HMAC-signed evidence token; the host verifies it and projects claims into the ACS snapshot | `test_signature_tampering_is_rejected`, `test_fabricated_escalation_evidence_is_blocked` |
-| Flow Integrity | Status, account, and KB tools consume evidence from the previous step; skipped or cross-case prerequisites fail closed | `test_skipped_diagnostic_prerequisite_is_blocked`, `test_fabricated_or_cross_case_evidence_fails_closed` |
+| Anchored Decisions | Host middleware validates raw diagnostic output, retains an HMAC-signed evidence envelope, gives the model only a short opaque handle, and projects verified claims into the ACS snapshot | `test_signature_tampering_is_rejected`, `test_fabricated_escalation_evidence_is_blocked` |
+| Flow Integrity | Status, account, and KB consume evidence intended for the next tool; skipped, reordered, or cross-case prerequisites fail closed | `test_skipped_diagnostic_prerequisite_is_blocked`, `test_missing_cross_case_and_reordered_tokens_are_untrusted` |
 | Escalation | Local remediation blocks ticket creation; verified no-remediation evidence permits one structured handoff | `test_known_local_remediation_blocks_escalation`, `test_anchored_no_remediation_ticket_is_allowed` |
 
 ```mermaid
 flowchart LR
     U[User request] --> H[Foundry Hosted Agent]
     H --> S[1. Service status]
-    S -->|signed evidence| A[2. Account state]
-    A -->|signed evidence| K[3. KB decision]
+    S -->|opaque evidence handle| A[2. Account state]
+    A -->|opaque evidence handle| K[3. KB decision]
     K -->|local fix| R[Explain remediation and stop]
-    K -->|no local fix + signed evidence| M[ACS middleware]
+    K -->|no local fix + opaque handle| M[Host resolves signed evidence]
     M --> P[Rego: scope + evidence + flow + escalation]
     P -->|allow| T[4. Create one mock ticket and stop]
     P -->|deny| B[blocked_by_acs]
     B --> H
 ```
 
-ACS remains stateless. The host owns verification and supplies the trusted
-snapshot. The policy evaluates that snapshot and the concrete tool arguments.
+ACS remains stateless. The host retains and verifies signed evidence behind each
+`ev:<evidence_id>` handle, then supplies the trusted snapshot. The policy
+evaluates that snapshot and the concrete tool arguments. Unknown references fail
+closed.
 
 ## Repository map
 
 | Path | Purpose |
 | --- | --- |
 | `src/helpdeskbot/main.py` | Responses `2.0.0` Hosted Agent entry point |
-| `src/helpdeskbot/evidence.py` | Signed evidence issuance, verification, and ACS snapshot projection |
+| `src/helpdeskbot/evidence.py` | Signed evidence issuance, opaque-handle registry, verification, and ACS snapshot projection |
 | `src/helpdeskbot/acs_middleware.py` | Fail-closed Agent Framework enforcement point |
 | `src/helpdeskbot/policies/` | ACS manifest and Rego policy for all four principles |
 | `src/helpdeskbot/tools.py` | Four deterministic, in-memory tools |
@@ -74,7 +76,8 @@ snapshot. The policy evaluates that snapshot and the concrete tool arguments.
 - Azure CLI, Azure Developer CLI, and the `microsoft.foundry` azd extension.
 - An Azure subscription with permission to create a Foundry project, model
   deployment, container registry, and Hosted Agent.
-- ASSERT's supported Azure OpenAI environment variables for optional ASSERT runs.
+- An Azure OpenAI deployment and Microsoft Entra credentials for optional ASSERT
+  generation and judging.
 
 The ACS Python package currently has no prebuilt Windows wheel. Run the complete
 test suite on Linux, WSL, or GitHub Actions.
@@ -133,7 +136,9 @@ sequence.
 
 `azure.yaml` declares a Foundry project, a `gpt-5.4-mini` deployment, and a
 Python 3.13 Hosted Agent using Responses protocol `2.0.0`. Foundry injects
-`FOUNDRY_PROJECT_ENDPOINT` into the container.
+`FOUNDRY_PROJECT_ENDPOINT` into the container. The `predeploy` hook downloads
+the pinned OPA 1.18.2 Linux binary, verifies its SHA-256, and bundles it beside
+the agent source so the ACS Rego dispatcher is available in the hosted runtime.
 
 Set the deployment values and provision only after reviewing subscription,
 region, model availability, and cost:
@@ -168,16 +173,54 @@ No Azure resources are deployed by cloning the repository.
 
 ## Evaluate trajectories with ASSERT
 
-ASSERT turns `evaluation/assert_suite/behavior.md` into adversarial and
-multi-turn tests. The spec and judge dimensions map directly to Scope, Anchored
-Decisions, Flow Integrity, and Escalation. The target runs the same agent with
-OTel traces so ASSERT can inspect tool order, arguments, policy interventions,
-and the final response.
+ASSERT judges the versioned adversarial cases in
+`evaluation/assert_suite/test_set.jsonl`. The behavior spec and judge dimensions
+map directly to Scope, Anchored Decisions, Flow Integrity, and Escalation. The
+target runs the same agent with OTel traces so ASSERT can inspect tool order,
+arguments, policy interventions, and the final response.
 
 ```bash
 python -m pip install -r evaluation/assert_suite/requirements.txt
+export AZURE_API_BASE="https://your-resource.openai.azure.com"
+export AZURE_API_VERSION="2025-04-01-preview"
+export AZURE_OPENAI_AD_TOKEN="$(az account get-access-token \
+  --resource https://cognitiveservices.azure.com \
+  --query accessToken -o tsv)"
+export AZURE_AD_TOKEN="$AZURE_OPENAI_AD_TOKEN"
 assert-ai run --config evaluation/assert_suite/eval_config.yaml
 ```
+
+The Foundry resource in this sample disables local API-key authentication, so
+ASSERT uses a short-lived Microsoft Entra token. Refresh the token before a new
+run. To evaluate a deployed Hosted Agent instead of starting the local target,
+also set:
+
+```bash
+export ASSERT_TARGET_MODE=hosted
+export ASSERT_AGENT_NAME=helpdeskbot
+export ASSERT_AGENT_VERSION=14
+export ASSERT_AZD_ENVIRONMENT=safe-e2e
+assert-ai run --config evaluation/assert_suite/eval_config.yaml
+```
+
+Hosted runs use serial inference because parallel `azd ai agent invoke` processes
+can contend for local authentication and environment state. Pinning
+`ASSERT_AGENT_VERSION` is intentional: Hosted Agent deployments are immutable,
+and evaluating an implicit latest version can mix the candidate and baseline.
+The target reconstructs the complete trajectory from Responses SSE events and
+hashes evidence tokens before writing OTel attributes.
+
+The test set is intentionally checked in rather than generated. This sample has
+only two valid fixture pairs, so unconstrained synthetic generation can create
+real identity providers, personal data, or unsupported aliases and then score a
+correct scope refusal as overrefusal. ASSERT still provides the systematized
+behavior taxonomy, trajectory capture, and model-based judging; the versioned
+cases keep the measured boundary stable and reviewable.
+
+The final validation against Hosted Agent version 14 completed all eight
+inferences and all eight judge calls with 0% policy violations, 0% overrefusal,
+and 0% judge failures. The fixed set includes both baseline outcomes plus
+pressure against scope, anchoring, flow, and escalation.
 
 Generated ASSERT or ACS artifacts are review inputs, not production policy.
 Review proposed controls and add deterministic regression tests before adoption.
@@ -205,10 +248,11 @@ actions, broken flows, and missed escalation conditions require separate gates.
 
 ## Production hardening
 
-The HMAC token is intentionally compact for a teaching sample. A production
-capability should add expiry, nonce and replay protection, key rotation, audience
-binding, secure secret storage, and durable audit correlation. Never expose the
-signing key to the model.
+The in-memory handle registry is intentionally compact for a teaching sample. A
+production capability should use a durable, session-scoped capability store with
+expiry, nonce and replay protection, key rotation, deployment binding,
+replica-safe lookup, secure secret storage, and durable audit correlation. Never
+expose the signing key or signed envelope to the model.
 
 This middleware converts only expected `pre_tool_call` denial into a structured
 tool result. Post-tool denial, policy runtime failure, malformed evidence, and

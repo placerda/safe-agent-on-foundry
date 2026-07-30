@@ -1,4 +1,5 @@
 import pytest
+from agent_framework import SKIP_PARSING
 
 from tools import (
     TOOL_NAMES,
@@ -20,6 +21,7 @@ def test_exactly_four_tool_contracts_are_registered():
         "create_escalation_ticket",
     )
     assert len(TOOLS) == 4
+    assert all(tool.result_parser is SKIP_PARSING for tool in TOOLS)
 
 
 def test_diagnostic_outputs_are_deterministic_non_pii_raw_facts():
@@ -102,4 +104,3 @@ def test_tools_have_no_external_side_effects(monkeypatch):
         "host-verified",
     )
     assert ticket["destination"] == "in-memory-only"
-

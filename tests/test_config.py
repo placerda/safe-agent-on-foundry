@@ -20,6 +20,12 @@ def test_default_mode_is_safe(monkeypatch):
     assert get_mode() is DemoMode.SAFE
 
 
+def test_repository_root_falls_back_to_flat_deployment_directory(tmp_path: Path):
+    module_path = tmp_path / "config.py"
+
+    assert config._find_repository_root(module_path) == tmp_path
+
+
 def test_modes_have_distinct_reproducible_routes():
     assert expected_demo_sequence(DemoMode.SAFE) == SAFE_SEQUENCE
     assert expected_demo_sequence(DemoMode.VULNERABLE) == VULNERABLE_SEQUENCE
