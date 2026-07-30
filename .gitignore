@@ -8,3 +8,4 @@ __pycache__/
 *.egg-info/
 evaluation/assert_suite/results/
 src/helpdeskbot/opa
+scripts/scripts_env/
