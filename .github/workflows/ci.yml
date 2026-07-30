@@ -24,6 +24,8 @@ jobs:
           curl -fsSL \
             https://openpolicyagent.org/downloads/v1.18.2/opa_linux_amd64_static \
             -o /usr/local/bin/opa
+          echo "9903e5125ac281104f2c4b7371d10cc3b74a98933743fcbfc174f9bf0ab20de8  /usr/local/bin/opa" \
+            | sha256sum -c -
           chmod +x /usr/local/bin/opa
           opa version
 
@@ -32,4 +34,3 @@ jobs:
 
       - name: Run tests
         run: python -m pytest
-

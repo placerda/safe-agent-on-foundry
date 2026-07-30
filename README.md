@@ -253,6 +253,8 @@ production capability should use a durable, session-scoped capability store with
 expiry, nonce and replay protection, key rotation, deployment binding,
 replica-safe lookup, secure secret storage, and durable audit correlation. Never
 expose the signing key or signed envelope to the model.
+The current registry is process-global, not session-isolated. A production store
+must bind every handle to its originating session and authorization context.
 
 This middleware converts only expected `pre_tool_call` denial into a structured
 tool result. Post-tool denial, policy runtime failure, malformed evidence, and
