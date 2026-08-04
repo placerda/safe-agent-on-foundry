@@ -127,7 +127,7 @@ def issue_evidence(
 
 
 def publish_evidence(token: str) -> str:
-    """Keep signed claims in the host and return a short model-visible handle."""
+    """Store host-signed evidence in the registry and return the short evidence reference (ev:<id>) the model sees."""
     claims = verify_evidence(token)
     reference = f"{EVIDENCE_REFERENCE_PREFIX}{claims['evidence_id']}"
     _EVIDENCE_REGISTRY[reference] = token
@@ -135,7 +135,7 @@ def publish_evidence(token: str) -> str:
 
 
 def resolve_evidence_reference(value: str) -> str:
-    """Resolve a host-issued handle while retaining direct-token test support."""
+    """Resolve a host-issued evidence reference while retaining direct-token test support."""
     if not value.startswith(EVIDENCE_REFERENCE_PREFIX):
         return value
     try:

@@ -61,7 +61,7 @@ async def test_first_diagnostic_step_is_allowed(control):
 
     result = await control.run_tool(
         "get_system_status",
-        {"case_id": "urgent-signin", "service": "identity"},
+        {"case_id": "token-expired-signin", "service": "identity"},
         execute,
         snapshot=safe_snapshot(),
     )
@@ -73,9 +73,9 @@ async def test_first_diagnostic_step_is_allowed(control):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("tool_name", ["get_user_account", "search_kb"])
 async def test_skipped_diagnostic_prerequisite_is_blocked(control, tool_name):
-    arguments = {"case_id": "urgent-signin"}
+    arguments = {"case_id": "token-expired-signin"}
     if tool_name == "get_user_account":
-        arguments["account_alias"] = "demo-user"
+        arguments["account_alias"] = "alex-user"
     with pytest.raises(AgentControlBlocked) as blocked:
         await control.run_tool(
             tool_name,
@@ -119,7 +119,7 @@ async def test_scope_boundary_blocks_high_or_non_access_tickets(control):
                     "summary": "Fictional issue",
                     "severity": severity,
                     "account_alias": "locked-user",
-                    "decision_evidence_token": "opaque",
+                    "decision_evidence_token": "placeholder-token",
                 },
                 never_execute,
                 snapshot=safe_snapshot(),
@@ -134,17 +134,17 @@ async def test_known_local_remediation_blocks_escalation(control):
         await control.run_tool(
             "create_escalation_ticket",
             {
-                "case_id": "urgent-signin",
+                "case_id": "token-expired-signin",
                 "category": "access",
                 "summary": "Sign-in token expired",
                 "severity": "medium",
-                "account_alias": "demo-user",
-                "decision_evidence_token": "opaque",
+                "account_alias": "alex-user",
+                "decision_evidence_token": "placeholder-token",
             },
             never_execute,
             snapshot=safe_snapshot(
-                case_id="urgent-signin",
-                account_alias="demo-user",
+                case_id="token-expired-signin",
+                account_alias="alex-user",
                 local_remediation_available=True,
             ),
         )
@@ -163,10 +163,10 @@ async def test_evidence_subject_must_match_ticket(control):
                 "summary": "Locked account",
                 "severity": "medium",
                 "account_alias": "locked-user",
-                "decision_evidence_token": "opaque",
+                "decision_evidence_token": "placeholder-token",
             },
             never_execute,
-            snapshot=safe_snapshot(account_alias="demo-user"),
+            snapshot=safe_snapshot(account_alias="alex-user"),
         )
 
     assert blocked.value.result.verdict.reason == "evidence_subject_mismatch"
@@ -205,7 +205,7 @@ async def test_anchored_no_remediation_ticket_is_allowed(control):
             "summary": "Locked account has no local remediation",
             "severity": "medium",
             "account_alias": "locked-user",
-            "decision_evidence_token": "opaque-to-rego",
+            "decision_evidence_token": "placeholder-token-value",
         },
         execute,
         snapshot=safe_snapshot(),

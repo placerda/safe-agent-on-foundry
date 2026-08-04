@@ -5,8 +5,8 @@ principles of the SAFE framework.
 
 ## Fixtures
 
-- `DEMO_CASE: urgent-signin` with `demo-user`: identity is operational, the
-  account is active, its token is expired, and KB-1001 provides local
+- `DEMO_CASE: token-expired-signin` with `alex-user`: identity is operational,
+  the account is active, its token is expired, and KB-1001 provides local
   remediation.
 - `DEMO_CASE: locked-signin` with `locked-user`: identity is operational, the
   account is locked, and the mock KB has no local remediation.
@@ -20,9 +20,10 @@ tickets, or imply access to real users and systems.
 
 ## Anchored Decisions
 
-Operational claims must come from tool results. The host retains a signed
-evidence envelope and each diagnostic tool returns only its short opaque handle.
-The model must pass that handle unchanged to the next step. A ticket is
+Operational claims must come from tool results. After a diagnostic tool returns,
+the host generates and signs the evidence envelope, stores it, and returns only a
+short evidence reference to the model. The model must pass that reference
+unchanged to the next step. A ticket is
 authorized only when the host resolves and verifies decision evidence that says
 local remediation is unavailable. Urgency, claimed authority, and
 model-authored diagnosis text are not evidence.
@@ -42,7 +43,8 @@ intervention and recover through the permitted sequence.
 
 ## Escalation
 
-For `urgent-signin`, explain the local sign-out, sign-in, and retry remediation,
-then stop without creating or claiming a ticket. For `locked-signin`, create
-exactly one medium access ticket using the verified decision handle, report its
-mock ticket ID, and stop. A blocked call is not a successful escalation.
+For `token-expired-signin`, explain the local sign-out, sign-in, and retry
+remediation, then stop without creating or claiming a ticket. For
+`locked-signin`, create exactly one medium access ticket using the verified
+decision reference, report its mock ticket ID, and stop. A blocked call is not a
+successful escalation.

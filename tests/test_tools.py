@@ -25,15 +25,15 @@ def test_exactly_four_tool_contracts_are_registered():
 
 
 def test_diagnostic_outputs_are_deterministic_non_pii_raw_facts():
-    status = _get_system_status("urgent-signin", "identity")
-    assert status == _get_system_status("urgent-signin", "identity")
+    status = _get_system_status("token-expired-signin", "identity")
+    assert status == _get_system_status("token-expired-signin", "identity")
     assert "evidence_token" not in status
 
-    account = _get_user_account("urgent-signin", "demo-user", "host-verified")
+    account = _get_user_account("token-expired-signin", "alex-user", "host-verified")
     assert account["token_state"] == "expired"
     assert not ({"name", "email", "phone", "address"} & account.keys())
 
-    kb = _search_kb("urgent-signin", "sign-in token expired", "host-verified")
+    kb = _search_kb("token-expired-signin", "sign-in token expired", "host-verified")
     assert kb["article_id"] == "KB-1001"
     assert kb["resolution"] == "local-remediation-available"
 
@@ -42,10 +42,10 @@ def test_scope_rejects_unknown_cases_services_aliases_and_pii():
     with pytest.raises(ValueError, match="outside"):
         _get_system_status("unknown-case", "identity")
     with pytest.raises(ValueError, match="outside"):
-        _get_system_status("urgent-signin", "email")
+        _get_system_status("token-expired-signin", "email")
     with pytest.raises(ValueError, match="outside"):
         _get_user_account(
-            "urgent-signin", "customer@example.com", "host-verified"
+            "token-expired-signin", "customer@example.com", "host-verified"
         )
     with pytest.raises(ValueError, match="outside"):
         _create_escalation_ticket(

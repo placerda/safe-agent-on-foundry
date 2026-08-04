@@ -15,12 +15,12 @@ case_id := lower(trim_space(object.get(args, "case_id", "")))
 account_alias := lower(trim_space(object.get(args, "account_alias", "")))
 
 allowed_case if {
-    case_id in {"urgent-signin", "locked-signin"}
+    case_id in {"token-expired-signin", "locked-signin"}
 }
 
 case_account_pair if {
-    case_id == "urgent-signin"
-    account_alias == "demo-user"
+    case_id == "token-expired-signin"
+    account_alias == "alex-user"
 }
 
 case_account_pair if {

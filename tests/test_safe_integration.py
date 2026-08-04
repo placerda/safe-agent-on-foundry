@@ -60,10 +60,10 @@ async def diagnostic_flow(case_id: str, account_alias: str):
 
 
 @pytest.mark.asyncio
-async def test_urgent_case_preserves_flow_and_stops_on_local_remediation():
+async def test_token_expired_case_preserves_flow_and_stops_on_local_remediation():
     reset_mock_tickets()
     middleware, status, account, kb = await diagnostic_flow(
-        "urgent-signin", "demo-user"
+        "token-expired-signin", "alex-user"
     )
 
     assert verify_evidence(resolve_evidence_reference(status["evidence_token"]))[
@@ -85,11 +85,11 @@ async def test_urgent_case_preserves_flow_and_stops_on_local_remediation():
         middleware,
         "create_escalation_ticket",
         {
-            "case_id": "urgent-signin",
+            "case_id": "token-expired-signin",
             "category": "access",
             "summary": "Expired sign-in token",
             "severity": "medium",
-            "account_alias": "demo-user",
+            "account_alias": "alex-user",
             "decision_evidence_token": kb["evidence_token"],
         },
         _create_escalation_ticket,
@@ -140,7 +140,7 @@ async def test_scope_and_flow_fail_before_tool_execution():
         middleware,
         "search_kb",
         {
-            "case_id": "urgent-signin",
+            "case_id": "token-expired-signin",
             "query": "skip account lookup",
             "account_evidence_token": "fabricated",
         },

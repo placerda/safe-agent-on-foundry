@@ -1,7 +1,7 @@
 """Deterministic fictional scope for the SAFE helpdesk sample."""
 
 CASE_ACCOUNTS = {
-    "urgent-signin": "demo-user",
+    "token-expired-signin": "alex-user",
     "locked-signin": "locked-user",
 }
 

@@ -107,7 +107,7 @@ async def test_deny_never_executes_tool_and_becomes_structured_result():
     context = SimpleNamespace(
         function=SimpleNamespace(name="create_escalation_ticket"),
         arguments={
-            "case_id": "urgent-signin",
+            "case_id": "token-expired-signin",
             "decision_evidence_token": "fabricated",
         },
         result=None,
@@ -133,7 +133,7 @@ async def test_runtime_failure_propagates_fail_closed():
 
     context = SimpleNamespace(
         function=SimpleNamespace(name="search_kb"),
-        arguments={"case_id": "urgent-signin"},
+        arguments={"case_id": "token-expired-signin"},
         result=None,
     )
 
@@ -191,7 +191,7 @@ async def test_incomplete_diagnostic_result_fails_closed():
 
     context = SimpleNamespace(
         function=SimpleNamespace(name="get_system_status"),
-        arguments={"case_id": "urgent-signin", "service": "identity"},
+        arguments={"case_id": "token-expired-signin", "service": "identity"},
         result=None,
     )
 

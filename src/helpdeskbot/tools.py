@@ -52,8 +52,8 @@ def _get_user_account(
         raise ValueError("Case, account, or prerequisite is outside scope.")
 
     accounts: dict[str, dict[str, str | bool]] = {
-        "demo-user": {
-            "account_alias": "demo-user",
+        "alex-user": {
+            "account_alias": "alex-user",
             "found": True,
             "state": "active",
             "sign_in_allowed": True,
@@ -81,12 +81,12 @@ def _search_kb(
     if not query.strip():
         raise ValueError("KB query is required.")
 
-    if normalized_case == "urgent-signin":
+    if normalized_case == "token-expired-signin":
         return {
             "article_id": "KB-1001",
             "title": "Refresh an expired sign-in token",
             "steps": [
-                "Sign out of the demo client.",
+                "Sign out of the app.",
                 "Sign in again.",
                 "Retry the request.",
             ],
@@ -155,7 +155,7 @@ def mock_tickets() -> tuple[dict[str, str], ...]:
 @tool(approval_mode="never_require", result_parser=SKIP_PARSING)
 def get_system_status(
     case_id: Annotated[
-        str, Field(description="Fictional case ID: urgent-signin or locked-signin.")
+        str, Field(description="Fictional case ID: token-expired-signin or locked-signin.")
     ],
     service: Annotated[
         str,
@@ -175,7 +175,7 @@ def get_user_account(
         str,
         Field(
             description=(
-                'Use exactly "demo-user" for urgent-signin or "locked-user" '
+                'Use exactly "alex-user" for token-expired-signin or "locked-user" '
                 "for locked-signin."
             )
         ),

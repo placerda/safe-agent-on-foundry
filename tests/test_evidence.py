@@ -79,7 +79,7 @@ def test_missing_cross_case_and_reordered_tokens_are_untrusted():
     cross_case = evidence_snapshot_for_call(
         "create_escalation_ticket",
         {
-            "case_id": "urgent-signin",
+            "case_id": "token-expired-signin",
             "decision_evidence_token": decision_token(),
         },
     )
@@ -163,7 +163,7 @@ def test_host_issues_complete_chained_evidence_from_raw_results():
 def test_host_accepts_framework_serialized_tool_object():
     result = attach_result_evidence(
         "get_system_status",
-        {"case_id": "urgent-signin", "service": "identity"},
+        {"case_id": "token-expired-signin", "service": "identity"},
         '{"service":"identity","state":"operational"}',
         {},
     )
@@ -179,7 +179,7 @@ def test_host_accepts_framework_serialized_tool_object():
 def test_host_accepts_framework_content_wrapper():
     result = attach_result_evidence(
         "get_system_status",
-        {"case_id": "urgent-signin", "service": "identity"},
+        {"case_id": "token-expired-signin", "service": "identity"},
         [SimpleNamespace(text='{"service":"identity","state":"operational"}')],
         {},
     )
@@ -194,7 +194,7 @@ def test_host_accepts_framework_content_wrapper():
 def test_host_accepts_framework_function_result_wrapper():
     result = attach_result_evidence(
         "get_system_status",
-        {"case_id": "urgent-signin", "service": "identity"},
+        {"case_id": "token-expired-signin", "service": "identity"},
         [
             SimpleNamespace(
                 text=None,
@@ -232,7 +232,7 @@ def test_host_rejects_result_that_changes_the_evidence_subject():
             "get_user_account",
             arguments,
             {
-                "account_alias": "demo-user",
+                "account_alias": "alex-user",
                 "found": True,
                 "state": "active",
                 "sign_in_allowed": True,

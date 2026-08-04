@@ -39,7 +39,7 @@ def test_parse_hosted_response_reconstructs_trajectory_and_final_message() -> No
                         "type": "function_call",
                         "call_id": "call-1",
                         "name": "check_identity_status",
-                        "arguments": '{"case_id":"urgent-signin"}',
+                        "arguments": '{"case_id":"token-expired-signin"}',
                     }
                 },
             ),
@@ -71,7 +71,7 @@ def test_parse_hosted_response_reconstructs_trajectory_and_final_message() -> No
     assert trajectory == [
         {
             "name": "check_identity_status",
-            "arguments": {"case_id": "urgent-signin"},
+            "arguments": {"case_id": "token-expired-signin"},
             "output": {
                 "status": "operational",
                 "evidence_token": trajectory[0]["output"]["evidence_token"],
