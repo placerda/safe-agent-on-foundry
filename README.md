@@ -1,7 +1,7 @@
 # Build a SAFE agent on Microsoft Foundry
 
-This sample builds a governed identity HelpdeskBot as a Microsoft Foundry Hosted
-Agent. It operationalizes the four principles from Paulo Lacerda's
+This repository builds a governed identity HelpdeskBot as a Microsoft Foundry
+Hosted Agent. It operationalizes the four principles from Paulo Lacerda's
 [SAFE: Designing Responsible Agentic Systems](https://pub.towardsai.net/safe-designing-responsible-agentic-systems-3dcc27075d4b):
 
 1. **Scope** bounds what the agent may diagnose and execute.
@@ -10,13 +10,14 @@ Agent. It operationalizes the four principles from Paulo Lacerda's
 4. **Escalation** defines when the agent must stop or hand off.
 
 The agent uses Microsoft Agent Framework, the Agent Control Specification (ACS),
-ASSERT, and native Foundry evaluation. SAFE is the design framework. ACS is the
-runtime enforcement layer. ASSERT and Foundry evaluations measure whether the
-behavior remains aligned.
+ASSERT, and native Foundry evaluation. SAFE defines what the agent may do, which
+evidence can justify an action, which path it must follow, and when it must hand
+off. ACS enforces that contract at runtime. ASSERT and Foundry evaluations
+measure whether the behavior remains aligned.
 
 ## The two deterministic outcomes
 
-The sample uses only fictional, in-memory data:
+The implementation uses only fictional, in-memory data:
 
 | Case | Evidence | Required outcome |
 | --- | --- | --- |
@@ -190,7 +191,7 @@ export AZURE_AD_TOKEN="$AZURE_OPENAI_AD_TOKEN"
 assert-ai run --config evaluation/assert_suite/eval_config.yaml
 ```
 
-The Foundry resource in this sample disables local API-key authentication, so
+The Foundry resource in this repository disables local API-key authentication, so
 ASSERT uses a short-lived Microsoft Entra token. Refresh the token before a new
 run. To evaluate a deployed Hosted Agent instead of starting the local target,
 also set:
@@ -210,7 +211,7 @@ and evaluating an implicit latest version can mix the candidate and baseline.
 The target reconstructs the complete trajectory from Responses SSE events and
 hashes evidence tokens before writing OTel attributes.
 
-The test set is intentionally checked in rather than generated. This sample has
+The test set is intentionally checked in rather than generated. This repository has
 only two valid fixture pairs, so unconstrained synthetic generation can create
 real identity providers, personal data, or unsupported aliases and then score a
 correct scope refusal as overrefusal. ASSERT still provides the systematized
@@ -248,7 +249,7 @@ actions, broken flows, and missed escalation conditions require separate gates.
 
 ## Production hardening
 
-The in-memory handle registry is intentionally compact for a teaching sample. A
+The in-memory handle registry is intentionally compact for a teaching implementation. A
 production capability should use a durable, session-scoped capability store with
 expiry, nonce and replay protection, key rotation, deployment binding,
 replica-safe lookup, secure secret storage, and durable audit correlation. Never
