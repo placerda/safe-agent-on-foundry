@@ -62,7 +62,7 @@ def test_snapshot_contains_only_verified_strict_claims():
         "create_escalation_ticket",
         {
             "case_id": "locked-signin",
-            "decision_evidence_token": decision_token(),
+            "decision_evidence_reference": decision_token(),
         },
     )
 
@@ -72,7 +72,7 @@ def test_snapshot_contains_only_verified_strict_claims():
     assert snapshot["facts"]["local_remediation_available"] is False
 
 
-def test_missing_cross_case_and_reordered_tokens_are_untrusted():
+def test_missing_cross_case_and_reordered_references_are_untrusted():
     missing = evidence_snapshot_for_call(
         "create_escalation_ticket", {"case_id": "locked-signin"}
     )
@@ -80,14 +80,14 @@ def test_missing_cross_case_and_reordered_tokens_are_untrusted():
         "create_escalation_ticket",
         {
             "case_id": "token-expired-signin",
-            "decision_evidence_token": decision_token(),
+            "decision_evidence_reference": decision_token(),
         },
     )
     reordered = evidence_snapshot_for_call(
         "create_escalation_ticket",
         {
             "case_id": "locked-signin",
-            "decision_evidence_token": decision_token(
+            "decision_evidence_reference": decision_token(
                 sequence=["search_kb", "get_user_account"]
             ),
         },
@@ -118,7 +118,7 @@ def test_host_issues_complete_chained_evidence_from_raw_results():
     account_input = {
         "case_id": "locked-signin",
         "account_alias": "locked-user",
-        "service_evidence_token": status["evidence_token"],
+        "service_evidence_reference": status["evidence_reference"],
     }
     account_prior = evidence_snapshot_for_call("get_user_account", account_input)
     account = attach_result_evidence(
@@ -136,7 +136,7 @@ def test_host_issues_complete_chained_evidence_from_raw_results():
     kb_input = {
         "case_id": "locked-signin",
         "query": "locked account",
-        "account_evidence_token": account["evidence_token"],
+        "account_evidence_reference": account["evidence_reference"],
     }
     kb_prior = evidence_snapshot_for_call("search_kb", kb_input)
     decision = attach_result_evidence(
@@ -150,7 +150,7 @@ def test_host_issues_complete_chained_evidence_from_raw_results():
     )
 
     claims = verify_evidence(
-        resolve_evidence_reference(decision["evidence_token"]),
+        resolve_evidence_reference(decision["evidence_reference"]),
         expected_case_id="locked-signin",
         expected_stage="decision",
         expected_audience="create_escalation_ticket",
@@ -169,9 +169,9 @@ def test_host_accepts_framework_serialized_tool_object():
     )
 
     assert result["state"] == "operational"
-    assert result["evidence_token"].startswith("ev:")
+    assert result["evidence_reference"].startswith("ev:")
     assert (
-        verify_evidence(resolve_evidence_reference(result["evidence_token"]))["stage"]
+        verify_evidence(resolve_evidence_reference(result["evidence_reference"]))["stage"]
         == "system_status"
     )
 
@@ -186,7 +186,7 @@ def test_host_accepts_framework_content_wrapper():
 
     assert result["state"] == "operational"
     assert (
-        verify_evidence(resolve_evidence_reference(result["evidence_token"]))["stage"]
+        verify_evidence(resolve_evidence_reference(result["evidence_reference"]))["stage"]
         == "system_status"
     )
 
@@ -206,7 +206,7 @@ def test_host_accepts_framework_function_result_wrapper():
 
     assert result["state"] == "operational"
     assert (
-        verify_evidence(resolve_evidence_reference(result["evidence_token"]))["stage"]
+        verify_evidence(resolve_evidence_reference(result["evidence_reference"]))["stage"]
         == "system_status"
     )
 
@@ -223,7 +223,7 @@ def test_host_rejects_result_that_changes_the_evidence_subject():
     arguments = {
         "case_id": "locked-signin",
         "account_alias": "locked-user",
-        "service_evidence_token": status_token,
+        "service_evidence_reference": status_token,
     }
     prior = evidence_snapshot_for_call("get_user_account", arguments)
 

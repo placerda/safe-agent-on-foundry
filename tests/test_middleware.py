@@ -72,7 +72,7 @@ async def test_verified_claims_are_forwarded_to_acs_snapshot():
         arguments={
             "case_id": "locked-signin",
             "account_alias": "locked-user",
-            "decision_evidence_token": decision_token(),
+            "decision_evidence_reference": decision_token(),
         },
         result=None,
     )
@@ -108,7 +108,7 @@ async def test_deny_never_executes_tool_and_becomes_structured_result():
         function=SimpleNamespace(name="create_escalation_ticket"),
         arguments={
             "case_id": "token-expired-signin",
-            "decision_evidence_token": "fabricated",
+            "decision_evidence_reference": "fabricated",
         },
         result=None,
     )
@@ -165,7 +165,7 @@ async def test_post_tool_block_propagates_after_execution():
         function=SimpleNamespace(name="create_escalation_ticket"),
         arguments={
             "case_id": "locked-signin",
-            "decision_evidence_token": decision_token(),
+            "decision_evidence_reference": decision_token(),
         },
         result=None,
     )

@@ -42,7 +42,7 @@ async def diagnostic_flow(case_id: str, account_alias: str):
         {
             "case_id": case_id,
             "account_alias": account_alias,
-            "service_evidence_token": status["evidence_token"],
+            "service_evidence_reference": status["evidence_reference"],
         },
         _get_user_account,
     )
@@ -52,7 +52,7 @@ async def diagnostic_flow(case_id: str, account_alias: str):
         {
             "case_id": case_id,
             "query": "sign-in diagnosis",
-            "account_evidence_token": account["evidence_token"],
+            "account_evidence_reference": account["evidence_reference"],
         },
         _search_kb,
     )
@@ -66,18 +66,18 @@ async def test_token_expired_case_preserves_flow_and_stops_on_local_remediation(
         "token-expired-signin", "alex-user"
     )
 
-    assert verify_evidence(resolve_evidence_reference(status["evidence_token"]))[
+    assert verify_evidence(resolve_evidence_reference(status["evidence_reference"]))[
         "sequence"
     ] == [
         "get_system_status"
     ]
-    assert verify_evidence(resolve_evidence_reference(account["evidence_token"]))[
+    assert verify_evidence(resolve_evidence_reference(account["evidence_reference"]))[
         "sequence"
     ] == [
         "get_system_status",
         "get_user_account",
     ]
-    assert verify_evidence(resolve_evidence_reference(kb["evidence_token"]))["facts"][
+    assert verify_evidence(resolve_evidence_reference(kb["evidence_reference"]))["facts"][
         "local_remediation_available"
     ] is True
 
@@ -90,7 +90,7 @@ async def test_token_expired_case_preserves_flow_and_stops_on_local_remediation(
             "summary": "Expired sign-in token",
             "severity": "medium",
             "account_alias": "alex-user",
-            "decision_evidence_token": kb["evidence_token"],
+            "decision_evidence_reference": kb["evidence_reference"],
         },
         _create_escalation_ticket,
     )
@@ -110,7 +110,7 @@ async def test_locked_case_creates_exactly_one_anchored_handoff():
         "summary": "Locked account has no local remediation",
         "severity": "medium",
         "account_alias": "locked-user",
-        "decision_evidence_token": kb["evidence_token"],
+        "decision_evidence_reference": kb["evidence_reference"],
     }
 
     first = await invoke(
@@ -142,7 +142,7 @@ async def test_scope_and_flow_fail_before_tool_execution():
         {
             "case_id": "token-expired-signin",
             "query": "skip account lookup",
-            "account_evidence_token": "fabricated",
+            "account_evidence_reference": "fabricated",
         },
         _search_kb,
     )
@@ -155,7 +155,7 @@ async def test_scope_and_flow_fail_before_tool_execution():
             "summary": "Contact customer@example.com",
             "severity": "medium",
             "account_alias": "locked-user",
-            "decision_evidence_token": "fabricated",
+            "decision_evidence_reference": "fabricated",
         },
         _create_escalation_ticket,
     )

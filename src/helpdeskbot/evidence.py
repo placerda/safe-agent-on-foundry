@@ -20,19 +20,19 @@ _EVIDENCE_REGISTRY: dict[str, str] = {}
 
 EXPECTED_INPUT_EVIDENCE = {
     "get_user_account": {
-        "field": "service_evidence_token",
+        "field": "service_evidence_reference",
         "stage": "system_status",
         "audience": "get_user_account",
         "sequence": ["get_system_status"],
     },
     "search_kb": {
-        "field": "account_evidence_token",
+        "field": "account_evidence_reference",
         "stage": "account",
         "audience": "search_kb",
         "sequence": ["get_system_status", "get_user_account"],
     },
     "create_escalation_ticket": {
-        "field": "decision_evidence_token",
+        "field": "decision_evidence_reference",
         "stage": "decision",
         "audience": "create_escalation_ticket",
         "sequence": ["get_system_status", "get_user_account", "search_kb"],
@@ -81,7 +81,7 @@ def _decode(value: str) -> bytes:
     try:
         return base64.urlsafe_b64decode(value + padding)
     except (ValueError, TypeError) as exc:
-        raise EvidenceError("Evidence token is not valid base64url.") from exc
+        raise EvidenceError("Evidence reference is not valid base64url.") from exc
 
 
 def _canonical_json(value: dict[str, Any]) -> bytes:
@@ -153,7 +153,7 @@ def _validate_claim_schema(payload: dict[str, Any]) -> None:
     required_types = REQUIRED_FACT_TYPES.get(stage)
     facts = payload.get("facts")
     if required_types is None or not isinstance(facts, dict):
-        raise EvidenceError("Evidence token stage or facts are invalid.")
+        raise EvidenceError("Evidence reference stage or facts are invalid.")
     for field, expected_type in required_types.items():
         if not isinstance(facts.get(field), expected_type):
             raise EvidenceError(f"Evidence fact {field} is missing or invalid.")
@@ -185,18 +185,18 @@ def verify_evidence(
     try:
         body, provided_signature = token.split(".", maxsplit=1)
     except ValueError as exc:
-        raise EvidenceError("Evidence token must contain a signature.") from exc
+        raise EvidenceError("Evidence reference must contain a signature.") from exc
 
     expected_signature = _encode(
         hmac.new(_secret(secret), body.encode("ascii"), hashlib.sha256).digest()
     )
     if not hmac.compare_digest(provided_signature, expected_signature):
-        raise EvidenceError("Evidence token signature is invalid.")
+        raise EvidenceError("Evidence reference signature is invalid.")
 
     try:
         payload = json.loads(_decode(body))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise EvidenceError("Evidence token payload is invalid.") from exc
+        raise EvidenceError("Evidence reference payload is invalid.") from exc
 
     if (
         not isinstance(payload, dict)
@@ -205,7 +205,7 @@ def verify_evidence(
         or not isinstance(payload.get("audience"), str)
         or not isinstance(payload.get("sequence"), list)
     ):
-        raise EvidenceError("Evidence token claims are invalid.")
+        raise EvidenceError("Evidence reference claims are invalid.")
     _validate_claim_schema(payload)
 
     normalized_case_id = (
@@ -381,7 +381,7 @@ def attach_result_evidence(
 
     return {
         **raw,
-        "evidence_token": publish_evidence(
+        "evidence_reference": publish_evidence(
             issue_evidence(
                 case_id=case_id,
                 stage=stage,

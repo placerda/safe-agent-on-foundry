@@ -10,10 +10,9 @@ Hosted Agent. It operationalizes the four principles from Paulo Lacerda's
 4. **Escalation** defines when the agent must stop or hand off.
 
 The agent uses Microsoft Agent Framework, the Agent Control Specification (ACS),
-ASSERT, and native Foundry evaluation. SAFE defines what the agent may do, which
-evidence can justify an action, which path it must follow, and when it must hand
-off. ACS enforces that contract at runtime. ASSERT and Foundry evaluations
-measure whether the behavior remains aligned.
+and ASSERT. SAFE defines what the agent may do, which evidence can justify an
+action, which path it must follow, and when it must hand off. ACS enforces that
+contract at runtime. ASSERT checks complete trajectories for regressions.
 
 ## The two deterministic outcomes
 
@@ -35,7 +34,7 @@ through the permitted flow.
 | --- | --- | --- |
 | Scope | Rego limits HelpdeskBot to two fictional identity cases and medium access tickets; PII, other severities, and other categories are denied | `test_scope_boundary_blocks_high_or_non_access_tickets` and `test_email_in_summary_has_highest_priority` |
 | Anchored Decisions | Host middleware validates raw diagnostic output, generates and HMAC-signs the evidence envelope, stores it in a server-side registry, and gives the model only a short evidence reference; verified claims are projected into the ACS snapshot | `test_signature_tampering_is_rejected`, `test_fabricated_escalation_evidence_is_blocked` |
-| Flow Integrity | Status, account, and KB consume evidence intended for the next tool; skipped, reordered, or cross-case prerequisites fail closed | `test_skipped_diagnostic_prerequisite_is_blocked`, `test_missing_cross_case_and_reordered_tokens_are_untrusted` |
+| Flow Integrity | Status, account, and KB consume evidence intended for the next tool; skipped, reordered, or cross-case prerequisites fail closed | `test_skipped_diagnostic_prerequisite_is_blocked`, `test_missing_cross_case_and_reordered_references_are_untrusted` |
 | Escalation | Local remediation blocks ticket creation; verified no-remediation evidence permits one structured handoff | `test_known_local_remediation_blocks_escalation`, `test_anchored_no_remediation_ticket_is_allowed` |
 
 ```mermaid
@@ -97,6 +96,30 @@ python -m pytest
 The policy tests use the real ACS runtime and OPA. They assert both the verdict
 and the absence of the protected callback, which proves that pre-tool denial
 prevented the side effect.
+
+### See each SAFE principle change the verdict
+
+The model is useful for the complete demo, but it is not deterministic enough to
+reproduce every policy boundary on demand. This script sends five controlled
+snapshots through the same ACS manifest and Rego policy:
+
+```bash
+python scripts/show_safe_controls.py
+```
+
+The first four calls each violate one SAFE principle. ACS denies them before the
+protected callback runs. The fifth call is a valid handoff, so ACS invokes the
+callback:
+
+```text
+Check                ACS result                                 Tool executed
+------------------------------------------------------------------------------
+Scope                deny: scope_boundary                       false
+Anchored Decisions   deny: unanchored_decision                  false
+Flow Integrity       deny: flow_integrity_violation             false
+Escalation           deny: local_remediation_available          false
+Valid handoff        allow                                      true
+```
 
 ## Run the Hosted Agent locally
 

@@ -34,3 +34,6 @@ jobs:
 
       - name: Run tests
         run: python -m pytest
+
+      - name: Show SAFE control verdicts
+        run: python scripts/show_safe_controls.py

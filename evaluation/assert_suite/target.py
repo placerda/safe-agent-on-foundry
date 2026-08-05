@@ -24,7 +24,7 @@ def _safe_value(value: Any) -> Any:
         return {
             key: (
                 f"token:{hashlib.sha256(str(item).encode()).hexdigest()[:12]}"
-                if key == "evidence_token" or key.endswith("_evidence_token")
+                if key == "evidence_reference" or key.endswith("_evidence_reference")
                 else _safe_value(item)
             )
             for key, item in value.items()

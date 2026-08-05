@@ -27,7 +27,7 @@ def test_exactly_four_tool_contracts_are_registered():
 def test_diagnostic_outputs_are_deterministic_non_pii_raw_facts():
     status = _get_system_status("token-expired-signin", "identity")
     assert status == _get_system_status("token-expired-signin", "identity")
-    assert "evidence_token" not in status
+    assert "evidence_reference" not in status
 
     account = _get_user_account("token-expired-signin", "alex-user", "host-verified")
     assert account["token_state"] == "expired"

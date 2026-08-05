@@ -40,14 +40,14 @@ def _get_system_status(case_id: str, service: str) -> dict[str, str]:
 
 
 def _get_user_account(
-    case_id: str, account_alias: str, service_evidence_token: str
+    case_id: str, account_alias: str, service_evidence_reference: str
 ) -> dict[str, str | bool]:
     normalized_case = case_id.strip().lower()
     normalized_alias = account_alias.strip().lower()
     if (
         normalized_case not in CASE_ACCOUNTS
         or CASE_ACCOUNTS[normalized_case] != normalized_alias
-        or not service_evidence_token
+        or not service_evidence_reference
     ):
         raise ValueError("Case, account, or prerequisite is outside scope.")
 
@@ -73,10 +73,10 @@ def _get_user_account(
 
 
 def _search_kb(
-    case_id: str, query: str, account_evidence_token: str
+    case_id: str, query: str, account_evidence_reference: str
 ) -> dict[str, str | list[str]]:
     normalized_case = case_id.strip().lower()
-    if normalized_case not in CASE_ACCOUNTS or not account_evidence_token:
+    if normalized_case not in CASE_ACCOUNTS or not account_evidence_reference:
         raise ValueError("Case or prerequisite is outside scope.")
     if not query.strip():
         raise ValueError("KB query is required.")
@@ -108,7 +108,7 @@ def _create_escalation_ticket(
     summary: str,
     severity: str,
     account_alias: str,
-    decision_evidence_token: str,
+    decision_evidence_reference: str,
 ) -> dict[str, str]:
     normalized_case = case_id.strip().lower()
     normalized_alias = account_alias.strip().lower()
@@ -117,7 +117,7 @@ def _create_escalation_ticket(
         or normalized_alias != CASE_ACCOUNTS["locked-signin"]
         or category.strip().lower() != ALLOWED_TICKET_CATEGORY
         or severity.strip().lower() != ALLOWED_TICKET_SEVERITY
-        or not decision_evidence_token
+        or not decision_evidence_reference
         or "@" in summary
     ):
         raise ValueError("Ticket request is outside HelpdeskBot scope.")
@@ -180,18 +180,18 @@ def get_user_account(
             )
         ),
     ],
-    service_evidence_token: Annotated[
+    service_evidence_reference: Annotated[
         str,
         Field(
             description=(
-                "Copy evidence_token exactly from the immediately preceding "
+                "Copy evidence_reference exactly from the immediately preceding "
                 "get_system_status result."
             )
         ),
     ],
 ) -> dict[str, str | bool]:
     """Return non-PII account state from the local mock catalog."""
-    return _get_user_account(case_id, account_alias, service_evidence_token)
+    return _get_user_account(case_id, account_alias, service_evidence_reference)
 
 
 @tool(approval_mode="never_require", result_parser=SKIP_PARSING)
@@ -200,18 +200,18 @@ def search_kb(
         str, Field(description="The same fictional case ID used by prior steps.")
     ],
     query: Annotated[str, Field(description="Helpdesk terms to search in the mock KB.")],
-    account_evidence_token: Annotated[
+    account_evidence_reference: Annotated[
         str,
         Field(
             description=(
-                "Copy evidence_token exactly from the immediately preceding "
+                "Copy evidence_reference exactly from the immediately preceding "
                 "get_user_account result."
             )
         ),
     ],
 ) -> dict[str, str | list[str]]:
     """Search the deterministic in-memory knowledge base."""
-    return _search_kb(case_id, query, account_evidence_token)
+    return _search_kb(case_id, query, account_evidence_reference)
 
 
 @tool(approval_mode="never_require", result_parser=SKIP_PARSING)
@@ -230,11 +230,11 @@ def create_escalation_ticket(
     account_alias: Annotated[
         str, Field(description="Must be the fictional locked-user alias.")
     ],
-    decision_evidence_token: Annotated[
+    decision_evidence_reference: Annotated[
         str,
         Field(
             description=(
-                "Copy evidence_token exactly from the immediately preceding "
+                "Copy evidence_reference exactly from the immediately preceding "
                 "search_kb result."
             )
         ),
@@ -247,7 +247,7 @@ def create_escalation_ticket(
         summary,
         severity,
         account_alias,
-        decision_evidence_token,
+        decision_evidence_reference,
     )
 
 

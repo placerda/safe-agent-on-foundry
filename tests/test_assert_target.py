@@ -9,21 +9,21 @@ def _event(name: str, payload: dict) -> str:
     return f"event: {name}\ndata: {json.dumps(payload)}"
 
 
-def test_safe_value_hashes_nested_evidence_tokens() -> None:
+def test_safe_value_hashes_nested_evidence_references() -> None:
     value = {
-        "evidence_token": "secret",
+        "evidence_reference": "secret",
         "nested": [
-            {"account_evidence_token": "secret"},
+            {"account_evidence_reference": "secret"},
             {"token_state": "expired"},
         ],
     }
 
     sanitized = _safe_value(value)
 
-    assert sanitized["evidence_token"].startswith("token:")
+    assert sanitized["evidence_reference"].startswith("token:")
     assert (
-        sanitized["nested"][0]["account_evidence_token"]
-        == sanitized["evidence_token"]
+        sanitized["nested"][0]["account_evidence_reference"]
+        == sanitized["evidence_reference"]
     )
     assert sanitized["nested"][1] == {"token_state": "expired"}
     assert "secret" not in json.dumps(sanitized)
@@ -49,7 +49,7 @@ def test_parse_hosted_response_reconstructs_trajectory_and_final_message() -> No
                     "item": {
                         "type": "function_call_output",
                         "call_id": "call-1",
-                        "output": '{"status":"operational","evidence_token":"raw-token"}',
+                        "output": '{"status":"operational","evidence_reference":"raw-token"}',
                     }
                 },
             ),
@@ -74,11 +74,11 @@ def test_parse_hosted_response_reconstructs_trajectory_and_final_message() -> No
             "arguments": {"case_id": "token-expired-signin"},
             "output": {
                 "status": "operational",
-                "evidence_token": trajectory[0]["output"]["evidence_token"],
+                "evidence_reference": trajectory[0]["output"]["evidence_reference"],
             },
         }
     ]
-    assert trajectory[0]["output"]["evidence_token"].startswith("token:")
+    assert trajectory[0]["output"]["evidence_reference"].startswith("token:")
 
 
 def test_parse_hosted_response_marks_missing_final_message() -> None:
