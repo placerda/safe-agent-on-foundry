@@ -37,6 +37,9 @@ services:
         value: ${HELPDESKBOT_MODE:=safe}
       - name: SAFE_EVIDENCE_SECRET
         value: ${SAFE_EVIDENCE_SECRET}
+      # The hosted runtime reads this and defaults it to "true", which records
+      # prompts, tool arguments, and tool results in the exported traces. This
+      # agent handles account data, so the sample opts out.
       - name: OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
         value: ${OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT:=false}
     kind: hosted

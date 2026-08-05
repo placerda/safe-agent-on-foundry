@@ -9,9 +9,40 @@ from agent_control_specification import (
     InterventionPointResult,
     Verdict,
 )
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+    InMemorySpanExporter,
+)
+from opentelemetry.trace import StatusCode
 
+import acs_middleware
 from acs_middleware import AcsFunctionMiddleware, _configure_bundled_opa
 from evidence import EvidenceError, issue_evidence
+
+
+@pytest.fixture
+def recorded_spans(monkeypatch):
+    """Capture spans from a private provider instead of the global one."""
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(acs_middleware, "TRACER", provider.get_tracer("test"))
+    return exporter
+
+
+def permitting_result(value, decision=Decision.ALLOW):
+    """Build the ToolRunResult shape that ACS returns when a call proceeds."""
+    outcome = InterventionPointResult(
+        verdict=Verdict(decision=decision),
+        transformed_policy_target=None,
+        policy_input={},
+    )
+    return SimpleNamespace(
+        value=value,
+        pre_tool_call_result=outcome,
+        post_tool_call_result=outcome,
+    )
 
 
 def middleware_with(control):
@@ -200,3 +231,145 @@ async def test_incomplete_diagnostic_result_fails_closed():
 
     with pytest.raises(EvidenceError, match="outside scope or incomplete"):
         await middleware_with(AllowingControl()).process(context, call_next)
+
+
+def escalation_context(reference):
+    return SimpleNamespace(
+        function=SimpleNamespace(name="create_escalation_ticket"),
+        arguments={
+            "case_id": "locked-signin",
+            "account_alias": "locked-user",
+            "decision_evidence_reference": reference,
+        },
+        result=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_allow_span_reports_the_real_verdict(recorded_spans):
+    class AllowingControl:
+        async def run_tool(self, name, args, execute, **kwargs):
+            return permitting_result(await execute(args))
+
+    context = escalation_context(decision_token())
+
+    async def call_next():
+        context.result = {"ticket_id": "MOCK-0001"}
+
+    await middleware_with(AllowingControl()).process(context, call_next)
+
+    span = recorded_spans.get_finished_spans()[0]
+    assert span.name == "acs.policy.evaluate"
+    assert span.attributes["acs.tool.name"] == "create_escalation_ticket"
+    assert span.attributes["acs.intervention_point"] == "pre_tool_call"
+    assert span.attributes["acs.verdict"] == "allow"
+    assert span.attributes["acs.post_tool_call.verdict"] == "allow"
+    assert span.attributes["safe.evidence.valid"] is True
+    assert span.attributes["safe.evidence.stage"] == "decision"
+    assert span.attributes["safe.evidence.id"]
+    assert span.status.status_code is not StatusCode.ERROR
+
+
+@pytest.mark.asyncio
+async def test_permitting_verdict_is_not_hardcoded_to_allow(recorded_spans):
+    class WarningControl:
+        async def run_tool(self, name, args, execute, **kwargs):
+            return permitting_result(await execute(args), Decision.WARN)
+
+    context = escalation_context(decision_token())
+
+    async def call_next():
+        context.result = {"ticket_id": "MOCK-0001"}
+
+    await middleware_with(WarningControl()).process(context, call_next)
+
+    span = recorded_spans.get_finished_spans()[0]
+    assert span.attributes["acs.verdict"] == "warn"
+
+
+@pytest.mark.asyncio
+async def test_span_never_carries_facts_arguments_or_the_signed_token(
+    recorded_spans,
+):
+    class AllowingControl:
+        async def run_tool(self, name, args, execute, **kwargs):
+            return permitting_result(await execute(args))
+
+    token = decision_token()
+    context = escalation_context(token)
+
+    async def call_next():
+        context.result = {"ticket_id": "MOCK-0001"}
+
+    await middleware_with(AllowingControl()).process(context, call_next)
+
+    span = recorded_spans.get_finished_spans()[0]
+    serialized = repr(dict(span.attributes))
+    assert token not in serialized
+    assert "locked-user" not in serialized
+    assert "unit-test-secret" not in serialized
+    assert not any(key.startswith("safe.evidence.facts") for key in span.attributes)
+
+
+@pytest.mark.asyncio
+async def test_deny_span_records_reason_and_error_status(recorded_spans):
+    denial = InterventionPointResult(
+        verdict=Verdict(
+            decision=Decision.DENY,
+            reason="unanchored_decision",
+            message="Use trusted evidence.",
+        ),
+        transformed_policy_target=None,
+        policy_input={},
+    )
+
+    class DenyingControl:
+        async def run_tool(self, name, args, execute, **kwargs):
+            raise AgentControlBlocked(InterventionPoint.PRE_TOOL_CALL, denial)
+
+    context = escalation_context("fabricated")
+
+    async def call_next():
+        raise AssertionError("tool must not run")
+
+    await middleware_with(DenyingControl()).process(context, call_next)
+
+    span = recorded_spans.get_finished_spans()[0]
+    assert span.attributes["acs.verdict"] == "deny"
+    assert span.attributes["acs.reason"] == "unanchored_decision"
+    assert span.attributes["acs.intervention_point"] == "pre_tool_call"
+    assert span.attributes["safe.evidence.valid"] is False
+    assert span.attributes["safe.evidence.reason"]
+    assert span.status.status_code is StatusCode.ERROR
+
+
+@pytest.mark.asyncio
+async def test_post_tool_block_is_recorded_before_it_propagates(recorded_spans):
+    denial = InterventionPointResult(
+        verdict=Verdict(
+            decision=Decision.DENY,
+            reason="unsafe_result",
+            message="Do not expose this result.",
+        ),
+        transformed_policy_target=None,
+        policy_input={},
+    )
+
+    class PostDenyingControl:
+        async def run_tool(self, name, args, execute, **kwargs):
+            await execute(args)
+            raise AgentControlBlocked(InterventionPoint.POST_TOOL_CALL, denial)
+
+    context = escalation_context(decision_token())
+
+    async def call_next():
+        context.result = {"ticket_id": "MOCK-0001"}
+
+    with pytest.raises(AgentControlBlocked):
+        await middleware_with(PostDenyingControl()).process(context, call_next)
+
+    span = recorded_spans.get_finished_spans()[0]
+    assert span.attributes["acs.intervention_point"] == "post_tool_call"
+    assert span.attributes["acs.verdict"] == "deny"
+    assert span.attributes["acs.reason"] == "unsafe_result"
+    assert span.status.status_code is StatusCode.ERROR

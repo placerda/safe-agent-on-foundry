@@ -202,13 +202,68 @@ azd ai agent invoke \
 
 No Azure resources are deployed by cloning the repository.
 
+## Observability
+
+The hosted runtime owns OpenTelemetry. `azure-ai-agentserver-core` configures the
+tracer provider, the resource, and the exporters when the server starts, so this
+agent contains no provider or exporter setup of its own. Agent Framework emits
+GenAI spans such as `execute_tool get_system_status`, plus the matching duration
+metrics, for every tool call the middleware allows through.
+
+On top of that, `acs_middleware.py` opens one span per policy evaluation, so an
+ACS verdict is something you can query rather than something you infer from a log
+line:
+
+| Span | Attribute | Meaning |
+| --- | --- | --- |
+| `acs.policy.evaluate` | `acs.tool.name` | The tool the model proposed |
+| | `acs.intervention_point` | `pre_tool_call`, or the point that blocked the call |
+| | `acs.verdict` | The real decision: `allow`, `warn`, `transform`, or `deny` |
+| | `acs.reason` | The policy reason code on a denial, such as `unanchored_decision` |
+| | `acs.post_tool_call.verdict` | The post-execution decision, when ACS returns one |
+| | `safe.evidence.valid` | Whether the host verified the evidence behind the call |
+| | `safe.evidence.id`, `.stage`, `.audience` | Identifiers from the verified envelope |
+| | `safe.evidence.reason` | Why verification failed, when it failed |
+
+A denial also sets the span status to `ERROR`, which makes blocked actions easy to
+filter in Application Insights. Because the runtime installs a global tracer
+provider, these spans are automatically correlated with the request, model, and
+tool-call spans around them.
+
+Deliberately absent from the span: the signed envelope, the HMAC key, the verified
+`facts`, and the tool arguments. The host puts only identifiers and decisions on
+telemetry.
+
+One environment variable is worth setting explicitly:
+
+| Variable | Runtime default | Effect |
+| --- | --- | --- |
+| `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | `true` | Records prompts, tool-call arguments, and tool-call results in exported traces. This agent handles account data, so `azure.yaml` sets it to `false`. |
+
+The default is the surprising part. Content capture is on unless you turn it off,
+and `azure-ai-agentserver-core` reads this variable at startup to decide.
+
+Where the spans go is a deployment concern, not an application one. Foundry
+injects the reserved Application Insights connection string when project
+monitoring is enabled, so you do not set `APPLICATIONINSIGHTS_CONNECTION_STRING`
+yourself. Configure `OTEL_EXPORTER_OTLP_ENDPOINT` on the agent version to export
+to an OTLP collector as well; both destinations can operate at the same time.
+
+There is a SAFE property worth noticing here. In the normal hosted flow, a tool
+result contains ordinary mock fields plus a short `ev:` reference, while the
+signed token and the HMAC key stay in the server-side registry. Anchoring
+decisions to a reference instead of to the payload keeps the trusted facts out of
+every downstream system that reads a span. Content capture still records the
+reference and the raw tool data, though, so treat that setting as
+capability-bearing and enable it only in isolated development environments.
+
 ## Evaluate trajectories with ASSERT
 
 ASSERT judges the versioned adversarial cases in
 `evaluation/assert_suite/test_set.jsonl`. The behavior spec and judge dimensions
 map directly to Scope, Anchored Decisions, Flow Integrity, and Escalation. The
-target runs the same agent with OTel traces so ASSERT can inspect tool order,
-arguments, policy interventions, and the final response.
+target runs the same agent and emits its own trajectory spans so ASSERT can
+inspect tool order, arguments, policy interventions, and the final response.
 
 ```bash
 python -m pip install -r evaluation/assert_suite/requirements.txt
@@ -238,8 +293,11 @@ Hosted runs use serial inference because parallel `azd ai agent invoke` processe
 can contend for local authentication and environment state. Pinning
 `ASSERT_AGENT_VERSION` is intentional: Hosted Agent deployments are immutable,
 and evaluating an implicit latest version can mix the candidate and baseline.
-The target reconstructs the complete trajectory from Responses SSE events and
-hashes evidence references before writing OTel attributes.
+The target reconstructs the model-visible tool-call and response trajectory from
+Responses SSE events. Before it writes an attribute on one of its own trajectory
+spans, it hashes any evidence reference it finds. That hashing applies to the
+spans the target emits, not to the spans Agent Framework emits for the agent
+itself.
 
 The test set is intentionally checked in rather than generated. This repository has
 only two valid fixture pairs, so unconstrained synthetic generation can create
@@ -292,6 +350,11 @@ tool result. Post-tool denial, policy runtime failure, malformed evidence, and
 unsigned diagnostic output propagate. That distinction matters because a
 post-tool denial cannot truthfully claim it prevented an already executed side
 effect.
+
+Keep `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` at `false` outside
+development. Its runtime default is `true`, and leaving it there writes prompts,
+raw tool arguments, and raw tool results into spans, which can carry
+user-supplied text and evidence references into your telemetry backend.
 
 ## References
 

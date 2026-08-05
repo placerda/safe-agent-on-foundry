@@ -31,6 +31,9 @@ def build_agent() -> Agent:
 
 
 def main() -> None:
+    # The hosting runtime owns OpenTelemetry setup: it builds the provider,
+    # wires the exporters, and enables Agent Framework instrumentation before
+    # serving traffic. The agent only needs to emit its own spans.
     ResponsesHostServer(build_agent()).run()
 
 
