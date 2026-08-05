@@ -7,6 +7,7 @@ from agent_control_specification import (
     Decision,
     InterventionPoint,
     InterventionPointResult,
+    ToolRunResult,
     Verdict,
 )
 from opentelemetry.sdk.trace import TracerProvider
@@ -32,13 +33,17 @@ def recorded_spans(monkeypatch):
 
 
 def permitting_result(value, decision=Decision.ALLOW):
-    """Build the ToolRunResult shape that ACS returns when a call proceeds."""
+    """Build the real ToolRunResult that ACS returns when a call proceeds.
+
+    Using the actual dataclass rather than a stand-in means a field rename in
+    the ACS package breaks this suite instead of silently degrading the span.
+    """
     outcome = InterventionPointResult(
         verdict=Verdict(decision=decision),
         transformed_policy_target=None,
         policy_input={},
     )
-    return SimpleNamespace(
+    return ToolRunResult(
         value=value,
         pre_tool_call_result=outcome,
         post_tool_call_result=outcome,
@@ -373,3 +378,110 @@ async def test_post_tool_block_is_recorded_before_it_propagates(recorded_spans):
     assert span.attributes["acs.verdict"] == "deny"
     assert span.attributes["acs.reason"] == "unsafe_result"
     assert span.status.status_code is StatusCode.ERROR
+
+
+@pytest.mark.asyncio
+async def test_escaping_exception_never_records_its_message(recorded_spans):
+    """A tool failure must not leak its message or stack trace into telemetry.
+
+    OpenTelemetry records an exception event automatically unless the span is
+    opened with recording disabled. That event carries the exception message and
+    the formatted traceback, neither of which is filtered by the attribute
+    allowlist, so the span is opened with automatic recording turned off.
+    """
+
+    class ExplodingControl:
+        async def run_tool(self, name, args, execute, **kwargs):
+            raise RuntimeError("locked-user token unit-test-secret leaked")
+
+    context = escalation_context("fabricated")
+
+    async def call_next():
+        raise AssertionError("tool must not run")
+
+    with pytest.raises(RuntimeError):
+        await middleware_with(ExplodingControl()).process(context, call_next)
+
+    span = recorded_spans.get_finished_spans()[0]
+    assert span.events == ()
+    assert span.status.status_code is StatusCode.ERROR
+    assert span.status.description == "unhandled:RuntimeError"
+    assert "locked-user" not in repr(span.status.description)
+    assert "unit-test-secret" not in repr(dict(span.attributes))
+
+
+@pytest.mark.asyncio
+async def test_post_tool_block_records_no_exception_event(recorded_spans):
+    """The propagating AgentControlBlocked must not add an exception event."""
+    denial = InterventionPointResult(
+        verdict=Verdict(
+            decision=Decision.DENY,
+            reason="unsafe_result",
+            message="Do not expose account locked-user to the model.",
+        ),
+        transformed_policy_target=None,
+        policy_input={},
+    )
+
+    class PostDenyingControl:
+        async def run_tool(self, name, args, execute, **kwargs):
+            await execute(args)
+            raise AgentControlBlocked(InterventionPoint.POST_TOOL_CALL, denial)
+
+    context = escalation_context(decision_token())
+
+    async def call_next():
+        context.result = {"ticket_id": "MOCK-0001"}
+
+    with pytest.raises(AgentControlBlocked):
+        await middleware_with(PostDenyingControl()).process(context, call_next)
+
+    span = recorded_spans.get_finished_spans()[0]
+    assert span.events == ()
+    assert span.status.description == "unsafe_result"
+    assert "locked-user" not in repr(span.status.description)
+
+
+def test_evidence_reason_is_reduced_to_a_bounded_code():
+    """Rejection sentences are collapsed so the attribute stays queryable."""
+    assert acs_middleware._reason_code("flow_integrity_violation") == (
+        "flow_integrity_violation"
+    )
+    assert acs_middleware._reason_code("stage_mismatch") == "stage_mismatch"
+    assert (
+        acs_middleware._reason_code(
+            "Evidence reference ev:4f123 is addressed to search_kb, "
+            "not create_escalation_ticket."
+        )
+        == "evidence_validation_failed"
+    )
+    assert acs_middleware._reason_code(None) == "evidence_validation_failed"
+
+
+@pytest.mark.asyncio
+async def test_untrusted_evidence_reason_is_a_code_not_a_sentence(recorded_spans):
+    class DenyingControl:
+        async def run_tool(self, name, args, execute, **kwargs):
+            raise AgentControlBlocked(
+                InterventionPoint.PRE_TOOL_CALL,
+                InterventionPointResult(
+                    verdict=Verdict(
+                        decision=Decision.DENY, reason="unanchored_decision"
+                    ),
+                    transformed_policy_target=None,
+                    policy_input={},
+                ),
+            )
+
+    context = escalation_context("ev:definitely-not-a-real-reference")
+
+    async def call_next():
+        raise AssertionError("tool must not run")
+
+    await middleware_with(DenyingControl()).process(context, call_next)
+
+    reason = recorded_spans.get_finished_spans()[0].attributes[
+        "safe.evidence.reason"
+    ]
+    assert " " not in reason
+    assert reason.islower()

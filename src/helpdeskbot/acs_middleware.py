@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 import logging
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
 from typing import Any
@@ -28,12 +29,33 @@ LOGGER = logging.getLogger(__name__)
 TRACER = trace.get_tracer("helpdeskbot.acs")
 
 
+_STABLE_CODE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def _reason_code(reason: Any) -> str:
+    """Reduce an evidence rejection to a bounded, queryable code.
+
+    ``evidence_snapshot_for_call`` reports either a stable code such as
+    ``missing_evidence`` or a stringified ``EvidenceError``. Those messages are
+    written for a developer, not for a telemetry backend: they are unbounded in
+    cardinality and nothing stops a future message from quoting user-supplied
+    text. Anything that is not already a code collapses to one value.
+    """
+    if isinstance(reason, str) and _STABLE_CODE.match(reason):
+        return reason
+    return "evidence_validation_failed"
+
+
 def _evidence_attributes(prior_evidence: dict[str, Any]) -> dict[str, Any]:
     """Return the non-sensitive part of an evidence snapshot as span attributes.
 
     The signed envelope, the HMAC key, and the verified ``facts`` never reach
     telemetry. Only the reference, the flow position, and the validation
     outcome do.
+
+    Only ``safe.evidence.valid`` is always present. A bootstrap snapshot has no
+    reference to report, and a verified snapshot has nothing to reject, so the
+    remaining attributes are conditional by design.
     """
     attributes: dict[str, Any] = {
         "safe.evidence.valid": prior_evidence.get("valid") is True,
@@ -42,11 +64,12 @@ def _evidence_attributes(prior_evidence: dict[str, Any]) -> dict[str, Any]:
         ("evidence_id", "safe.evidence.id"),
         ("stage", "safe.evidence.stage"),
         ("audience", "safe.evidence.audience"),
-        ("reason", "safe.evidence.reason"),
     ):
         value = prior_evidence.get(key)
         if isinstance(value, str) and value:
             attributes[attribute] = value
+    if prior_evidence.get("reason") is not None:
+        attributes["safe.evidence.reason"] = _reason_code(prior_evidence["reason"])
     return attributes
 
 
@@ -121,7 +144,15 @@ class AcsFunctionMiddleware(FunctionMiddleware):
                 prior_evidence,
             )
 
-        with TRACER.start_as_current_span("acs.policy.evaluate") as span:
+        # The default span context manager records the exception message and the
+        # stack trace as a span event. A tool failure or an ACS interruption can
+        # quote arguments or account data, so the span reports only the
+        # exception type and the decision that produced it.
+        with TRACER.start_as_current_span(
+            "acs.policy.evaluate",
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
             span.set_attribute("acs.tool.name", tool_name)
             span.set_attribute(
                 "acs.intervention_point", InterventionPoint.PRE_TOOL_CALL.value
@@ -149,8 +180,8 @@ class AcsFunctionMiddleware(FunctionMiddleware):
                     "acs.intervention_point", exc.intervention_point.value
                 )
                 span.set_attribute("acs.verdict", verdict.decision.value)
-                span.set_attribute("acs.reason", reason)
-                span.set_status(Status(StatusCode.ERROR, reason))
+                span.set_attribute("acs.reason", _reason_code(reason))
+                span.set_status(Status(StatusCode.ERROR, _reason_code(reason)))
                 if exc.intervention_point != InterventionPoint.PRE_TOOL_CALL:
                     raise
                 context.result = {
@@ -160,6 +191,14 @@ class AcsFunctionMiddleware(FunctionMiddleware):
                     "message": verdict.message or str(exc),
                 }
                 return
+            except Exception as exc:
+                # A tool raised, or ACS itself failed. The type name is enough to
+                # find the trace; the message may quote arguments or account
+                # data, so it stays out of the span.
+                span.set_status(
+                    Status(StatusCode.ERROR, f"unhandled:{type(exc).__name__}")
+                )
+                raise
 
             # ACS has five decisions, not two. Read the real one instead of
             # assuming that a call which did not raise was decided "allow".
@@ -167,7 +206,7 @@ class AcsFunctionMiddleware(FunctionMiddleware):
             if decision:
                 span.set_attribute("acs.verdict", decision)
             if reason:
-                span.set_attribute("acs.reason", reason)
+                span.set_attribute("acs.reason", _reason_code(reason))
             post_decision, _ = _verdict_of(guarded, "post_tool_call_result")
             if post_decision:
                 span.set_attribute("acs.post_tool_call.verdict", post_decision)

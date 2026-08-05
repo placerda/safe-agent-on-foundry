@@ -210,29 +210,37 @@ agent contains no provider or exporter setup of its own. Agent Framework emits
 GenAI spans such as `execute_tool get_system_status`, plus the matching duration
 metrics, for every tool call the middleware allows through.
 
-On top of that, `acs_middleware.py` opens one span per policy evaluation, so an
-ACS verdict is something you can query rather than something you infer from a log
-line:
+On top of that, `acs_middleware.py` opens one `acs.policy.evaluate` span per
+governed tool invocation and records the pre- and post-tool verdicts it receives
+as attributes, so an ACS decision is something you can query rather than
+something you infer from a log line:
 
-| Span | Attribute | Meaning |
-| --- | --- | --- |
-| `acs.policy.evaluate` | `acs.tool.name` | The tool the model proposed |
-| | `acs.intervention_point` | `pre_tool_call`, or the point that blocked the call |
-| | `acs.verdict` | The real decision: `allow`, `warn`, `transform`, or `deny` |
-| | `acs.reason` | The policy reason code on a denial, such as `unanchored_decision` |
-| | `acs.post_tool_call.verdict` | The post-execution decision, when ACS returns one |
-| | `safe.evidence.valid` | Whether the host verified the evidence behind the call |
-| | `safe.evidence.id`, `.stage`, `.audience` | Identifiers from the verified envelope |
-| | `safe.evidence.reason` | Why verification failed, when it failed |
+| Span | Attribute | Always present | Meaning |
+| --- | --- | --- | --- |
+| `acs.policy.evaluate` | `acs.tool.name` | yes | The tool the model proposed |
+| | `acs.intervention_point` | yes | `pre_tool_call`, or the point that blocked the call |
+| | `acs.verdict` | yes | The real decision: `allow`, `deny`, `warn`, `transform`, or `escalate` |
+| | `acs.reason` | only when the verdict carries one | The policy reason code, such as `unanchored_decision` |
+| | `acs.post_tool_call.verdict` | only when ACS returns one | The post-execution decision |
+| | `safe.evidence.valid` | yes | Whether the host verified the evidence behind the call |
+| | `safe.evidence.id`, `.stage`, `.audience` | only for verified evidence | Identifiers from the verified envelope |
+| | `safe.evidence.reason` | only when verification failed | A bounded failure code, never the rejection sentence |
+
+Only the three attributes marked `yes` are guaranteed. A bootstrap call to
+`get_system_status` has no `evidence_id` yet, and an untrusted reference has no
+envelope at all, so treat the rest as conditional dimensions in your queries.
 
 A denial also sets the span status to `ERROR`, which makes blocked actions easy to
 filter in Application Insights. Because the runtime installs a global tracer
 provider, these spans are automatically correlated with the request, model, and
 tool-call spans around them.
 
-Deliberately absent from the span: the signed envelope, the HMAC key, the verified
-`facts`, and the tool arguments. The host puts only identifiers and decisions on
-telemetry.
+Deliberately absent from the ACS span: the signed envelope, the HMAC key, the
+verified `facts`, and the tool arguments. Exception messages and stack traces are
+absent too. OpenTelemetry records those automatically, so the span is opened with
+`record_exception=False` and the error status carries only a code such as
+`unhandled:RuntimeError`. The host puts identifiers and decisions on telemetry,
+nothing else.
 
 One environment variable is worth setting explicitly:
 
@@ -249,13 +257,15 @@ monitoring is enabled, so you do not set `APPLICATIONINSIGHTS_CONNECTION_STRING`
 yourself. Configure `OTEL_EXPORTER_OTLP_ENDPOINT` on the agent version to export
 to an OTLP collector as well; both destinations can operate at the same time.
 
-There is a SAFE property worth noticing here. In the normal hosted flow, a tool
-result contains ordinary mock fields plus a short `ev:` reference, while the
-signed token and the HMAC key stay in the server-side registry. Anchoring
-decisions to a reference instead of to the payload keeps the trusted facts out of
-every downstream system that reads a span. Content capture still records the
-reference and the raw tool data, though, so treat that setting as
-capability-bearing and enable it only in isolated development environments.
+There is a SAFE property worth noticing here, and it comes with a condition. In
+the normal hosted flow a tool result contains ordinary mock fields plus a short
+`ev:` reference, while the signed token and the HMAC key stay in the server-side
+registry. With content capture disabled, the ACS span excludes the signed
+envelope, the verified facts, and the arguments, so anchoring decisions to a
+reference instead of to the payload keeps trusted facts out of the systems that
+read spans. Enabling content capture exports the raw tool data and the reference
+anyway, which is why that setting is capability-bearing and belongs only in
+isolated development environments.
 
 ## Evaluate trajectories with ASSERT
 
