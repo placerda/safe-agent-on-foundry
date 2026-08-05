@@ -132,9 +132,11 @@ Copy `.env.example` to `.env` and provide:
 ```dotenv
 FOUNDRY_PROJECT_ENDPOINT=https://your-resource.services.ai.azure.com/api/projects/your-project
 AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-5.4-mini
-HELPDESKBOT_MODE=safe
 SAFE_EVIDENCE_SECRET=replace-with-at-least-32-random-characters
 ```
+
+`HELPDESKBOT_MODE` defaults to `safe`, so you only set it when you want the
+deliberately weakened `vulnerable` prompt described below.
 
 Use a generated secret, not the placeholder. Then authenticate and start the
 local Responses server:
@@ -174,7 +176,6 @@ region, model availability, and cost:
 ```bash
 azd auth login
 azd env set SAFE_EVIDENCE_SECRET "$(openssl rand -hex 32)"
-azd env set HELPDESKBOT_MODE safe
 azd up
 ```
 
