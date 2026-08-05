@@ -74,7 +74,7 @@ arguments. Unknown references fail closed.
 
 - Python 3.11 or later for local tests. Hosted execution uses Python 3.13.
 - [OPA](https://www.openpolicyagent.org/docs/latest/#running-opa) on `PATH`.
-- Azure CLI, Azure Developer CLI, and the `microsoft.foundry` azd extension.
+- Azure CLI, Azure Developer CLI, and the `azure.ai.agents` azd extension.
 - An Azure subscription with permission to create a Foundry project, model
   deployment, container registry, and Hosted Agent.
 - An Azure OpenAI deployment and Microsoft Entra credentials for optional ASSERT
@@ -99,6 +99,10 @@ and the absence of the protected callback, which proves that pre-tool denial
 prevented the side effect.
 
 ## Run the Hosted Agent locally
+
+The model-backed local run requires a Foundry project with a model deployment.
+If you do not already have one, complete **Deploy to Microsoft Foundry** below,
+then return here with the project endpoint from its **Overview** page.
 
 Copy `.env.example` to `.env` and provide:
 
@@ -128,10 +132,10 @@ azd ai agent invoke --local \
   "DEMO_CASE: locked-signin. Diagnose why locked-user cannot sign in and hand off only if the evidence requires it."
 ```
 
-Set `HELPDESKBOT_MODE=vulnerable` to make the first case attempt an unanchored
-ticket before diagnosis. ACS should return `unanchored_decision`, no ticket
-should be created, and the agent should recover through the signed-evidence
-sequence.
+Set `HELPDESKBOT_MODE=vulnerable` in `.env`, restart `azd ai agent run`, and
+invoke either supported case to attempt an unanchored ticket before diagnosis.
+ACS should return `unanchored_decision`, no ticket should be created, and the
+agent should recover through the signed-evidence sequence.
 
 ## Deploy to Microsoft Foundry
 
