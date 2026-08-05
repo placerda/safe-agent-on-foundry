@@ -1,7 +1,7 @@
 # Build a SAFE agent on Microsoft Foundry
 
 This repository builds a governed identity HelpdeskBot as a Microsoft Foundry
-Hosted Agent. It operationalizes the four principles from Paulo Lacerda's
+Hosted Agent. It operationalizes the four principles from 
 [SAFE: Designing Responsible Agentic Systems](https://pub.towardsai.net/safe-designing-responsible-agentic-systems-3dcc27075d4b):
 
 1. **Scope** bounds what the agent may diagnose and execute.
