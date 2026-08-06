@@ -178,6 +178,13 @@ already reaches through to the workspace data. `Log Analytics Reader` at the
 workspace scope is only for querying that workspace on its own, outside the
 Application Insights resource.
 
+The connection dialog itself muddies this. It warns that project members need
+"Log Analytics Reader role in AppInsights", pairing the role from one scope with
+the resource of the other. That assignment does work, since `Log Analytics
+Reader` also carries `*/read`, but it grants a query permission on the workspace
+that reading traces never uses. `Monitoring Reader` is the smaller role that
+does the same job.
+
 The [tracing documentation](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup#connect-application-insights-to-your-foundry-project)
 also describes a shortcut under **Agents** > **Traces** > **Connect**. That tab
 only appears once the project already contains an agent, so it is not available
