@@ -146,15 +146,27 @@ with **New Foundry** enabled:
 2. Select the project name at the top, then **Project details**.
 3. Open the **Connected resources** tab and select **Add connection**.
 4. Choose **Application Insights** and select the resource you just created.
+5. Set **Auth Type** to **Project Managed Identity**. The **API Key** option
+   stores a connection string in the project, which is one more secret to rotate
+   and revoke. The managed identity avoids it, and the rest of this sample
+   already authenticates with `DefaultAzureCredential`.
+6. Select **Connect**.
+
+The project's managed identity needs the **Monitoring Metrics Publisher** role on
+the Application Insights resource before it can write telemetry. In the Azure
+portal, open `appi-safe-agent` > **Access control (IAM)** > **Add role
+assignment**, pick **Monitoring Metrics Publisher**, and on the **Members** tab
+select **Managed identity**, then the Foundry resource `azd provision` created.
+
+Querying the collected telemetry is a separate permission and needs the
+**Log Analytics Reader** role on the same resource, assigned to you rather than
+to the project. Assign it the same way as the Foundry User role in the previous
+step.
 
 The [tracing documentation](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup#connect-application-insights-to-your-foundry-project)
 also describes a shortcut under **Agents** > **Traces** > **Connect**. That tab
 only appears once the project already contains an agent, so it is not available
 at this point in the walkthrough. Use it later if you prefer.
-
-Querying the collected telemetry needs the **Log Analytics Reader** role on the
-Application Insights resource. Assign it the same way as the Foundry User role
-in the previous step.
 
 If you already ran `azd deploy` before attaching the resource, plain
 `azd deploy helpdeskbot` will not help: with no tracked change it finishes in
