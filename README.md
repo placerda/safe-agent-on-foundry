@@ -79,55 +79,18 @@ only when the container starts, and Hosted Agent versions are immutable, so
 attach the resource **now**, between `azd provision` and `azd deploy`. Attaching
 it afterwards means the running version never sees it.
 
-```bash
-# bash / zsh
-RG=$(azd env get-value AZURE_RESOURCE_GROUP)
-SUB=$(azd env get-value AZURE_SUBSCRIPTION_ID)
-PROJECT=$(azd env get-value AZURE_ENV_NAME)
-LOC=$(azd env get-value AZURE_LOCATION)
-# The account name is generated at provisioning time and is not exported as an
-# azd variable. There is exactly one account in the resource group.
-ACCOUNT=$(az cognitiveservices account list -g "$RG" --query "[0].name" -o tsv)
+Use the [Foundry portal](https://ai.azure.com/) with **New Foundry** enabled:
 
-WS=$(az monitor log-analytics workspace create -g "$RG" -n log-safe --query id -o tsv)
-az monitor app-insights component create --app appi-safe -g "$RG" -l "$LOC" --workspace "$WS"
+1. Open the project created by `azd provision`.
+2. Select **Agents**, then **Traces**.
+3. Select **Connect**.
+4. Create a new Application Insights resource or select an existing one.
+5. Wait for the confirmation that the connection succeeded.
 
-CONN=$(az monitor app-insights component show --app appi-safe -g "$RG" --query connectionString -o tsv)
-RESID=$(az monitor app-insights component show --app appi-safe -g "$RG" --query id -o tsv)
-
-az rest --method put \
-  --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.CognitiveServices/accounts/$ACCOUNT/projects/$PROJECT/connections/appinsights?api-version=2025-04-01-preview" \
-  --body "{\"properties\":{\"category\":\"AppInsights\",\"target\":\"$CONN\",\"authType\":\"ApiKey\",\"isSharedToAll\":true,\"credentials\":{\"key\":\"$CONN\"},\"metadata\":{\"ApiType\":\"Azure\",\"ResourceId\":\"$RESID\"}}}"
-```
-
-```powershell
-# PowerShell. Inline JSON with escaped quotes does not survive the az shim,
-# so build the body as an object and pass it as a file.
-$RG      = azd env get-value AZURE_RESOURCE_GROUP
-$SUB     = azd env get-value AZURE_SUBSCRIPTION_ID
-$PROJECT = azd env get-value AZURE_ENV_NAME
-$LOC     = azd env get-value AZURE_LOCATION
-$ACCOUNT = az cognitiveservices account list -g $RG --query "[0].name" -o tsv
-
-$WS = az monitor log-analytics workspace create -g $RG -n log-safe --query id -o tsv
-az monitor app-insights component create --app appi-safe -g $RG -l $LOC --workspace $WS | Out-Null
-
-$CONN  = az monitor app-insights component show --app appi-safe -g $RG --query connectionString -o tsv
-$RESID = az monitor app-insights component show --app appi-safe -g $RG --query id -o tsv
-
-@{ properties = @{
-    category      = 'AppInsights'
-    target        = $CONN
-    authType      = 'ApiKey'
-    isSharedToAll = $true
-    credentials   = @{ key = $CONN }
-    metadata      = @{ ApiType = 'Azure'; ResourceId = $RESID }
-} } | ConvertTo-Json -Depth 5 -Compress | Out-File "$env:TEMP\appi-conn.json" -Encoding ascii
-
-az rest --method put `
-  --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.CognitiveServices/accounts/$ACCOUNT/projects/$PROJECT/connections/appinsights?api-version=2025-04-01-preview" `
-  --body "@$env:TEMP\appi-conn.json"
-```
+If **Connect** is not visible, open **Project details**, select **Connected
+resources**, then **Add connection** > **Application Insights**. The official
+[tracing setup](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup#connect-application-insights-to-your-foundry-project)
+shows both portal paths.
 
 If you already ran `azd deploy` before attaching the resource, plain
 `azd deploy helpdeskbot` will not help: with no tracked change it finishes in
