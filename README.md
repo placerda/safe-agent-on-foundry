@@ -87,6 +87,11 @@ Use the [Foundry portal](https://ai.azure.com/) with **New Foundry** enabled:
 4. Create a new Application Insights resource or select an existing one.
 5. Wait for the confirmation that the connection succeeded.
 
+If the page says **You don't have permission to build agents in this project**,
+select **Assign me the Foundry User role**, wait for the assignment to finish,
+then refresh the page. Azure **Owner** controls resources but does not include
+Foundry data-plane actions, so the additional role is expected.
+
 If **Connect** is not visible, open **Project details**, select **Connected
 resources**, then **Add connection** > **Application Insights**. The official
 [tracing setup](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup#connect-application-insights-to-your-foundry-project)
