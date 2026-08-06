@@ -274,11 +274,20 @@ azd env set HELPDESKBOT_MODE safe
 azd deploy helpdeskbot
 ```
 
-If you attached Application Insights, the decisions are queryable within a few
-minutes:
+If you attached Application Insights, open **Application Insights** >
+**appi-safe-agent** > **Logs** in the Azure portal. Paste this query and select
+**Run**:
 
-```powershell
-az monitor app-insights query -a appi-safe-agent -g rg-safe-agent --analytics-query "dependencies | where name == 'acs.policy.evaluate' | order by timestamp asc | project timestamp, success, customDimensions"
+```kusto
+dependencies
+| where name == "acs.policy.evaluate"
+| extend
+    Tool = tostring(customDimensions["acs.tool.name"]),
+    Verdict = tostring(customDimensions["acs.verdict"]),
+    EvidenceStage = tostring(customDimensions["safe.evidence.stage"]),
+    EvidenceValid = tobool(customDimensions["safe.evidence.valid"])
+| project timestamp, Tool, success, Verdict, EvidenceStage, EvidenceValid
+| order by timestamp desc
 ```
 
 A clean `locked-signin` conversation in `safe` mode produces four spans, and the
