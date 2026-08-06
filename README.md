@@ -198,6 +198,7 @@ Review subscription, region, model availability, and cost, then:
 
 ```bash
 azd auth login
+azd env new safe-agent                                      # skip if you already have an environment
 azd env set SAFE_EVIDENCE_SECRET "$(openssl rand -hex 32)"   # PowerShell: -join ((1..32) | % { '{0:x2}' -f (Get-Random -Max 256) })
 azd up
 ```
@@ -242,13 +243,18 @@ one-time step per environment:
 ```bash
 RG=$(azd env get-value AZURE_RESOURCE_GROUP)
 SUB=$(azd env get-value AZURE_SUBSCRIPTION_ID)
-ACCOUNT=$(azd env get-value AZURE_AI_ACCOUNT_NAME)
-PROJECT=$(azd env get-value AZURE_AI_PROJECT_NAME)
+PROJECT=$(azd env get-value AZURE_ENV_NAME)
+# The account name is generated at provisioning time and is not exported as an
+# azd variable. There is exactly one account in the resource group.
+ACCOUNT=$(az cognitiveservices account list -g "$RG" --query "[0].name" -o tsv)
+
+# Sanity check: the endpoint should contain both values.
+azd env get-value AGENT_HELPDESKBOT_ENDPOINT
 
 WS=$(az monitor log-analytics workspace create -g "$RG" -n log-safe \
   --query id -o tsv)
 az monitor app-insights component create --app appi-safe -g "$RG" \
-  -l eastus2 --workspace "$WS"
+  -l "$(azd env get-value AZURE_LOCATION)" --workspace "$WS"
 
 CONN=$(az monitor app-insights component show --app appi-safe -g "$RG" \
   --query connectionString -o tsv)
