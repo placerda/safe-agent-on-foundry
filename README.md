@@ -132,9 +132,12 @@ it afterwards means the running version never sees it.
    **Create**.
 2. Set **Resource group** to the group `azd provision` created and **Region** to
    the same region as the Foundry resource.
-3. Give it any name, leave **Resource mode** on **Workspace-based**, and pick or
-   create a Log Analytics workspace.
-4. Select **Review + create**, then **Create**.
+3. Name it `appi-safe-agent`, following the
+   [Cloud Adoption Framework abbreviation](https://learn.microsoft.com/azure/cloud-adoption-framework/ready/azure-best-practices/resource-abbreviations)
+   `appi-` for Application Insights.
+4. Leave **Resource mode** on **Workspace-based**, then pick an existing Log
+   Analytics workspace or create one named `log-safe-agent`.
+5. Select **Review + create**, then **Create**.
 
 **Connect it to the project** in the [Foundry portal](https://ai.azure.com/)
 with **New Foundry** enabled:
