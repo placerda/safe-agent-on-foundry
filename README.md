@@ -31,7 +31,7 @@ minutes. Everything below works on Windows PowerShell, macOS, and Linux.
 
 Cloning this repository deploys nothing and costs nothing. The steps below do
 create billable Azure resources, so review region and model availability first.
-Step 6 removes them.
+Step 7 removes them.
 
 ### 2. Provision
 
@@ -70,7 +70,53 @@ Then create the Foundry project and the model deployment:
 azd provision
 ```
 
-### 3. Attach Application Insights
+### 3. Grant yourself the Foundry User role
+
+`azd provision` and `azd deploy` run on your Azure permissions alone, so you can
+skip this step if you never open the portal. Everything else does need it. Azure
+**Owner** and **Contributor** manage resources but carry none of the Foundry
+data-plane actions, so the portal answers **You don't have permission to build
+agents in this project** until you also hold **Foundry User** on the Foundry
+resource.
+
+Assign it in the [Azure portal](https://portal.azure.com/):
+
+1. Open the resource group `azd provision` created and select the **Azure AI
+   Foundry** resource inside it. Its name starts with `cog-`.
+2. Select **Access control (IAM)**.
+3. Select **Add**, then **Add role assignment**.
+4. On the **Role** tab, search for **Foundry User** and select it.
+5. On the **Members** tab, choose **User, group, or service principal**, select
+   **Select members**, and pick your own account.
+6. Select **Review + assign**.
+
+One assignment on the Foundry resource covers every project inside it.
+Propagation takes up to a minute, so refresh the page before trying again.
+
+The Foundry portal also offers an **Assign me the Foundry User role** button on
+the error page itself. It fails in some tenants with **We couldn't assign the
+role**, which is why the IAM steps above are the reliable path.
+
+<details>
+<summary>Command line equivalent</summary>
+
+```powershell
+az role assignment create `
+  --assignee-object-id (az ad signed-in-user show --query id -o tsv) `
+  --assignee-principal-type User `
+  --role 53ca6127-db72-4b80-b1b0-d745d6d5456d `
+  --scope (az cognitiveservices account show `
+    --name (azd env get-value AZURE_AI_ACCOUNT_NAME) `
+    --resource-group (azd env get-value AZURE_RESOURCE_GROUP) `
+    --query id -o tsv)
+```
+
+`53ca6127-db72-4b80-b1b0-d745d6d5456d` is the role definition ID for Foundry
+User. The GUID is stable, while the display name changed from Azure AI User.
+
+</details>
+
+### 4. Attach Application Insights
 
 This step is optional, but it is the most interesting part of the sample, and
 the ordering matters. `azd provision` does not create Application Insights, and
@@ -79,23 +125,33 @@ only when the container starts, and Hosted Agent versions are immutable, so
 attach the resource **now**, between `azd provision` and `azd deploy`. Attaching
 it afterwards means the running version never sees it.
 
-Use the [Foundry portal](https://ai.azure.com/) with **New Foundry** enabled:
+**Create the Application Insights resource** in the
+[Azure portal](https://portal.azure.com/):
 
-1. Open the project created by `azd provision`.
-2. Select **Agents**, then **Traces**.
-3. Select **Connect**.
-4. Create a new Application Insights resource or select an existing one.
-5. Wait for the confirmation that the connection succeeded.
+1. Select **Create a resource**, search for **Application Insights**, and select
+   **Create**.
+2. Set **Resource group** to the group `azd provision` created and **Region** to
+   the same region as the Foundry resource.
+3. Give it any name, leave **Resource mode** on **Workspace-based**, and pick or
+   create a Log Analytics workspace.
+4. Select **Review + create**, then **Create**.
 
-If the page says **You don't have permission to build agents in this project**,
-select **Assign me the Foundry User role**, wait for the assignment to finish,
-then refresh the page. Azure **Owner** controls resources but does not include
-Foundry data-plane actions, so the additional role is expected.
+**Connect it to the project** in the [Foundry portal](https://ai.azure.com/)
+with **New Foundry** enabled:
 
-If **Connect** is not visible, open **Project details**, select **Connected
-resources**, then **Add connection** > **Application Insights**. The official
-[tracing setup](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup#connect-application-insights-to-your-foundry-project)
-shows both portal paths.
+1. Open the project `azd provision` created.
+2. Select the project name at the top, then **Project details**.
+3. Open the **Connected resources** tab and select **Add connection**.
+4. Choose **Application Insights** and select the resource you just created.
+
+The [tracing documentation](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup#connect-application-insights-to-your-foundry-project)
+also describes a shortcut under **Agents** > **Traces** > **Connect**. That tab
+only appears once the project already contains an agent, so it is not available
+at this point in the walkthrough. Use it later if you prefer.
+
+Querying the collected telemetry needs the **Log Analytics Reader** role on the
+Application Insights resource. Assign it the same way as the Foundry User role
+in the previous step.
 
 If you already ran `azd deploy` before attaching the resource, plain
 `azd deploy helpdeskbot` will not help: with no tracked change it finishes in
@@ -104,7 +160,7 @@ restarts. Force a new version by changing a value `azure.yaml` declares, for
 example `azd env set HELPDESKBOT_MODE vulnerable` followed by
 `azd deploy helpdeskbot`.
 
-### 4. Deploy
+### 5. Deploy
 
 ```bash
 azd deploy helpdeskbot
@@ -120,7 +176,7 @@ Confirm the version that is now live:
 azd ai agent show helpdeskbot
 ```
 
-### 5. Test
+### 6. Test
 
 Two deterministic cases, all fictional and in memory. `azd ai agent invoke`
 reuses the previous session by default, so pass `--new-session` or the second
@@ -187,7 +243,7 @@ What the model does next does not: it always recovers into the diagnostic flow,
 but whether it retries the ticket in the same turn varies. That variance is the
 reason the guarantee lives in the policy rather than in the prompt.
 
-### 6. Clean up
+### 7. Clean up
 
 ```bash
 azd down --purge
