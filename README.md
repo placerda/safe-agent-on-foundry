@@ -168,30 +168,22 @@ Assign both in the Azure portal under `appi-safe-agent` > **Access control
 previous step. For the first one, select **Managed identity** on the **Members**
 tab and pick the Foundry resource `azd provision` created.
 
-Two things are easy to get wrong here. The Foundry roles look like they should
-be enough but are not: `Foundry User`, `Foundry Project Manager`, and
-`Foundry Owner` show metrics and
-[no trace data](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions#agent-observability).
-And although the traces physically land in the Log Analytics workspace, the role
-you need depends on which door you read them through, not on where the bytes
-live:
+Do not use the Foundry roles for this. `Foundry User`, `Foundry Project Manager`,
+and `Foundry Owner` let you see metrics, but
+[not trace data](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions#agent-observability).
 
-- **Through the Application Insights resource**, which is what the `az monitor
-  app-insights query` command below does and what the Logs blade on
-  `appi-safe-agent` does, **Monitoring Reader** is enough. Its `*/read`
-  permission reaches through to the workspace data.
-- **Through the workspace itself**, opening `log-safe-agent` > **Logs** and
-  querying `AppTraces` or `AppDependencies` directly, you also need
-  **Log Analytics Reader** at the workspace scope. That is the role carrying the
-  `analytics/query/action` permission the workspace-scoped query requires.
+**Monitoring Reader** on `appi-safe-agent` is all you need for this walkthrough.
+It covers the `az monitor app-insights query` command shown later, and the
+**Logs** page of the `appi-safe-agent` resource.
 
-The walkthrough below only uses the first door, so `Monitoring Reader` covers it.
+Add **Log Analytics Reader** on `log-safe-agent` only if you also want to open
+the workspace and query the `AppTraces` and `AppDependencies` tables there. That
+is a separate page in the portal, and it checks permissions on the workspace
+instead of on `appi-safe-agent`.
 
-The connection dialog muddies this further. It warns that project members need
-"Log Analytics Reader role in AppInsights", pairing the role from one scope with
-the resource of the other. That assignment does work, since `Log Analytics
-Reader` also carries `*/read`, but it grants a workspace query permission that
-reading traces through the resource never uses.
+One thing may confuse you: the connection dialog asks for "Log Analytics Reader
+role in AppInsights". Assigning that works too, but it is broader than needed.
+`Monitoring Reader` is the smaller role for the same result.
 
 The [tracing documentation](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup#connect-application-insights-to-your-foundry-project)
 also describes a shortcut under **Agents** > **Traces** > **Connect**. That tab
