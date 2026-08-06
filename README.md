@@ -154,21 +154,14 @@ with **New Foundry** enabled:
    already authenticates with `DefaultAzureCredential`.
 6. Select **Connect**.
 
-Connecting the resource is not enough. Writing telemetry and reading it back are
-two different permissions, and neither comes with the Foundry roles:
+Connecting the resource grants the project's managed identity permission to send
+traces. It does not grant you permission to read them, and the Foundry roles do
+not either. Assign yourself **Log Analytics Reader** on `appi-safe-agent` >
+**Access control (IAM)** > **Add role assignment**, the same way as the Foundry
+User role in the previous step.
 
-| Principal | Role | Grants |
-| --- | --- | --- |
-| The project's managed identity | **Monitoring Metrics Publisher** | Sending traces |
-| You | **Log Analytics Reader** | Reading them back |
-
-Assign both on `appi-safe-agent` > **Access control (IAM)** > **Add role
-assignment**, the same way as the Foundry User role in the previous step. For the
-first one, select **Managed identity** on the **Members** tab and pick the
-Foundry resource `azd provision` created.
-
-A third assignment is needed once the agent exists, because it sends traces under
-an identity of its own. That step is in [Deploy](#5-deploy).
+One more assignment is needed once the agent exists, because it sends traces
+under an identity of its own. That step is in [Deploy](#5-deploy).
 
 > **Note.** `Foundry User`, `Foundry Project Manager`, and `Foundry Owner` show
 > metrics but
@@ -200,9 +193,9 @@ azd ai agent show helpdeskbot
 
 The output includes an **Instance Identity Principal ID**. That is the agent's own
 identity, and it is what sends the `acs.policy.evaluate` spans from inside the
-container. It needs **Monitoring Metrics Publisher** on `appi-safe-agent` as well.
-The project managed identity you granted earlier only covers the server-side
-`invoke_agent` span, so without this assignment the policy spans never arrive.
+container. It needs **Monitoring Metrics Publisher** on `appi-safe-agent`. The
+grant the portal made when you connected the resource covers the project, not the
+agent, so without this one the policy spans never arrive.
 
 Assign it on `appi-safe-agent` > **Access control (IAM)** > **Add role
 assignment** > **Monitoring Metrics Publisher**. On the **Members** tab, keep
