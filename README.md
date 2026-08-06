@@ -260,12 +260,18 @@ azd env set HELPDESKBOT_MODE safe
 azd deploy helpdeskbot
 ```
 
-> On PowerShell the syntax differs. Use `$TOKEN = az account get-access-token
-> --resource "https://ai.azure.com" --query accessToken -o tsv` and
-> `$ENDPOINT = azd env get-value AGENT_HELPDESKBOT_RESPONSES_ENDPOINT`, then send
-> the request with `Invoke-RestMethod -Uri $ENDPOINT -Method Post -Headers
-> @{ Authorization = "Bearer $TOKEN" } -ContentType "application/json" -Body
-> (@{ store = $false; input = "..." } | ConvertTo-Json)`.
+> On PowerShell the syntax differs:
+>
+> ```powershell
+> $TOKEN = az account get-access-token --resource "https://ai.azure.com" --query accessToken -o tsv
+> $ENDPOINT = azd env get-value AGENT_HELPDESKBOT_RESPONSES_ENDPOINT
+> ```
+>
+> ```powershell
+> $body = @{ store = $false; input = "DEMO_CASE: token-expired-signin. Diagnose why alex-user cannot sign in and take only permitted action." } | ConvertTo-Json
+> $r = Invoke-RestMethod -Uri $ENDPOINT -Method Post -Headers @{ Authorization = "Bearer $TOKEN" } -ContentType "application/json" -Body $body
+> $r.output | ForEach-Object { "$($_.type) $($_.name)" }
+> ```
 
 If you attached Application Insights, the decisions are queryable within a few
 minutes:
