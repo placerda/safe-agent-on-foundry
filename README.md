@@ -210,8 +210,24 @@ conversation, so open a new session between them. `azd ai agent invoke` reuses
 the previous session by default, and `--new-session` does not reliably rotate it,
 so the second case inherits the first case's context and refuses to act. Calling
 the agent's Responses endpoint directly avoids the problem, because every request
-without a session identifier starts a fresh one. Set the token and the endpoint
-once:
+without a session identifier starts a fresh one.
+
+The commands below are bash. On PowerShell, replace the two setup lines with:
+
+```powershell
+$TOKEN = az account get-access-token --resource "https://ai.azure.com" --query accessToken -o tsv
+$ENDPOINT = azd env get-value AGENT_HELPDESKBOT_RESPONSES_ENDPOINT
+```
+
+and replace each `curl` call with:
+
+```powershell
+$body = @{ store = $false; input = "PASTE THE INPUT HERE" } | ConvertTo-Json
+$r = Invoke-RestMethod -Uri $ENDPOINT -Method Post -Headers @{ Authorization = "Bearer $TOKEN" } -ContentType "application/json" -Body $body
+$r.output | ForEach-Object { "$($_.type) $($_.name)" }
+```
+
+Set the token and the endpoint once:
 
 ```bash
 TOKEN=$(az account get-access-token --resource "https://ai.azure.com" --query accessToken -o tsv)
@@ -259,19 +275,6 @@ refused it. Put it back when you are done:
 azd env set HELPDESKBOT_MODE safe
 azd deploy helpdeskbot
 ```
-
-> On PowerShell the syntax differs:
->
-> ```powershell
-> $TOKEN = az account get-access-token --resource "https://ai.azure.com" --query accessToken -o tsv
-> $ENDPOINT = azd env get-value AGENT_HELPDESKBOT_RESPONSES_ENDPOINT
-> ```
->
-> ```powershell
-> $body = @{ store = $false; input = "DEMO_CASE: token-expired-signin. Diagnose why alex-user cannot sign in and take only permitted action." } | ConvertTo-Json
-> $r = Invoke-RestMethod -Uri $ENDPOINT -Method Post -Headers @{ Authorization = "Bearer $TOKEN" } -ContentType "application/json" -Body $body
-> $r.output | ForEach-Object { "$($_.type) $($_.name)" }
-> ```
 
 If you attached Application Insights, the decisions are queryable within a few
 minutes:
