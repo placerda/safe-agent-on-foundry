@@ -283,11 +283,21 @@ dependencies
 | where name == "acs.policy.evaluate"
 | extend
     Tool = tostring(customDimensions["acs.tool.name"]),
+    Intervention = tostring(customDimensions["acs.intervention_point"]),
     Verdict = tostring(customDimensions["acs.verdict"]),
+    Reason = tostring(customDimensions["acs.reason"]),
     EvidenceStage = tostring(customDimensions["safe.evidence.stage"]),
     EvidenceValid = tobool(customDimensions["safe.evidence.valid"])
-| project timestamp, Tool, success, Verdict, EvidenceStage, EvidenceValid
 | order by timestamp desc
+| project
+    Time = format_datetime(timestamp, "yyyy-MM-dd HH:mm:ss"),
+    Outcome = iff(tobool(success), "ALLOW", "DENY"),
+    Tool,
+    Intervention,
+    Verdict,
+    Reason,
+    EvidenceStage,
+    EvidenceValid
 ```
 
 A clean `locked-signin` conversation in `safe` mode produces four spans, and the
