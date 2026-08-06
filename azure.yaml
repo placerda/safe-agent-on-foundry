@@ -32,7 +32,10 @@ services:
     description: A governed HelpdeskBot demonstrating SAFE, ACS, and ASSERT.
     environmentVariables:
       - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
-        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+        # Provisioning does not export this variable, and the container exits at
+        # startup without it. The default keeps it in sync with the deployment
+        # declared above.
+        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME:=gpt-5.4-mini}
       - name: HELPDESKBOT_MODE
         value: ${HELPDESKBOT_MODE:=safe}
       - name: SAFE_EVIDENCE_SECRET
@@ -57,6 +60,13 @@ services:
 infra:
   provider: microsoft.foundry
 hooks:
+  # azd seals the service package before the deploy phase, so downloading OPA in
+  # predeploy alone leaves it out of the uploaded package. prepackage is the hook
+  # that actually gets the binary into the image. prepare_opa.py is idempotent
+  # (SHA-256 checked), so declaring both is free.
+  prepackage:
+    kind: python
+    run: ./scripts/prepare_opa.py
   predeploy:
     kind: python
     run: ./scripts/prepare_opa.py
