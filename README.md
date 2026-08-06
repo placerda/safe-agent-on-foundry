@@ -172,18 +172,26 @@ Two things are easy to get wrong here. The Foundry roles look like they should
 be enough but are not: `Foundry User`, `Foundry Project Manager`, and
 `Foundry Owner` show metrics and
 [no trace data](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions#agent-observability).
-And although the traces physically land in the Log Analytics workspace, you do
-not need a role there, because the `*/read` permission in **Monitoring Reader**
-already reaches through to the workspace data. `Log Analytics Reader` at the
-workspace scope is only for querying that workspace on its own, outside the
-Application Insights resource.
+And although the traces physically land in the Log Analytics workspace, the role
+you need depends on which door you read them through, not on where the bytes
+live:
 
-The connection dialog itself muddies this. It warns that project members need
+- **Through the Application Insights resource**, which is what the `az monitor
+  app-insights query` command below does and what the Logs blade on
+  `appi-safe-agent` does, **Monitoring Reader** is enough. Its `*/read`
+  permission reaches through to the workspace data.
+- **Through the workspace itself**, opening `log-safe-agent` > **Logs** and
+  querying `AppTraces` or `AppDependencies` directly, you also need
+  **Log Analytics Reader** at the workspace scope. That is the role carrying the
+  `analytics/query/action` permission the workspace-scoped query requires.
+
+The walkthrough below only uses the first door, so `Monitoring Reader` covers it.
+
+The connection dialog muddies this further. It warns that project members need
 "Log Analytics Reader role in AppInsights", pairing the role from one scope with
 the resource of the other. That assignment does work, since `Log Analytics
-Reader` also carries `*/read`, but it grants a query permission on the workspace
-that reading traces never uses. `Monitoring Reader` is the smaller role that
-does the same job.
+Reader` also carries `*/read`, but it grants a workspace query permission that
+reading traces through the resource never uses.
 
 The [tracing documentation](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup#connect-application-insights-to-your-foundry-project)
 also describes a shortcut under **Agents** > **Traces** > **Connect**. That tab
@@ -249,7 +257,7 @@ If you attached Application Insights, the decisions are queryable within a few
 minutes:
 
 ```bash
-az monitor app-insights query -a appi-safe -g "$RG" --analytics-query \
+az monitor app-insights query -a appi-safe-agent -g rg-safe-agent --analytics-query \
   "dependencies | where name == 'acs.policy.evaluate'
    | order by timestamp asc
    | project timestamp, success, customDimensions"
