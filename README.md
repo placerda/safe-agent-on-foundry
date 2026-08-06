@@ -442,10 +442,11 @@ the error status carries only a code.
 
 `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` defaults to `true` in the
 runtime, which records prompts, tool arguments, and tool results in exported
-traces. Content capture is on unless you turn it off. This agent handles account
-data, so `azure.yaml` sets it to `false`, and you should keep it that way outside
-development. With it disabled the ACS span carries only identifiers, which is
-exactly why anchoring decisions to a reference instead of to a payload keeps
+traces. This sample keeps content capture enabled so the tutorial trajectory
+shows the complete interaction, including the final response. Set it to `false`
+before using sensitive or production data. With it disabled the ACS span carries
+only identifiers, which is exactly why anchoring decisions to a reference instead
+of to a payload keeps
 trusted facts out of the systems that read telemetry. Agent Framework still
 exports tool *definitions* on its own spans; the setting controls message
 content, not schema metadata.
