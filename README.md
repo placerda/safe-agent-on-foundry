@@ -54,6 +54,16 @@ azd env set SAFE_EVIDENCE_SECRET "$(openssl rand -hex 32)"
 azd env set SAFE_EVIDENCE_SECRET (-join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) }))
 ```
 
+`azure.yaml` gives this variable no default on purpose. If you skip this step,
+`azd deploy` still succeeds, because azd substitutes an empty string for an unset
+variable. The failure surfaces one layer down: the container calls
+`get_agent_config()` at startup, finds the value empty, and exits with
+`ValueError: Missing required configuration: SAFE_EVIDENCE_SECRET`. A value
+shorter than 32 characters fails the same way with
+`SAFE_EVIDENCE_SECRET must contain at least 32 characters.` Both beat the
+alternative of running with a guessable signing key, which would let a caller
+forge evidence envelopes and defeat Anchored Decisions entirely.
+
 Then create the Foundry project and the model deployment:
 
 ```bash
