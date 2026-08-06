@@ -1,7 +1,6 @@
 agent-control-specification==0.3.1b0
-agent-framework-foundry==1.10.3
-agent-framework-foundry-hosting==1.0.0b260722
+agent-framework-foundry==1.10.4
+agent-framework-foundry-hosting==1.0.0b260730
 azure-identity==1.25.3
 opentelemetry-api==1.43.0
 python-dotenv==1.2.2
-
