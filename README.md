@@ -179,8 +179,8 @@ an identity of its own. That step is in [Deploy](#5-deploy).
 > `azd deploy helpdeskbot` will not help: with no tracked change it finishes in
 > about twenty seconds without minting a new version, so the container never
 > restarts. Force a new version by changing a value `azure.yaml` declares, for
-> example `azd env set HELPDESKBOT_MODE vulnerable` followed by
-> `azd deploy helpdeskbot`.
+> example `azd env set OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT true`
+> followed by `azd deploy helpdeskbot`.
 
 ### 5. Deploy
 
