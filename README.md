@@ -249,6 +249,15 @@ The distinction that matters most: **ACS decides whether one proposed action may
 execute right now. ASSERT judges whether the whole conversation behaved as
 intended.** One is a runtime control, the other is an offline test.
 
+Why OPA is in that list at all: ACS keeps policy declarative instead of embedded
+in application code. `policies/manifest.yaml` declares `type: rego`, so the rules
+live in `policies/helpdesk.rego` and ACS delegates evaluation to OPA, the
+reference Rego engine. Two things follow. The rules become an artifact you can
+review, version, and test on their own, without reading the agent. And the
+verdict is produced outside the agent's own code path, so a prompt that talks the
+model into misbehaving still cannot rewrite the rule that stops it. Writing the
+same checks as `if` statements next to the tools would give up both properties.
+
 ### What the agent does
 
 | Case | Evidence | Required outcome |
