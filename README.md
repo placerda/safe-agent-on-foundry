@@ -136,7 +136,9 @@ it afterwards means the running version never sees it.
    [Cloud Adoption Framework abbreviation](https://learn.microsoft.com/azure/cloud-adoption-framework/ready/azure-best-practices/resource-abbreviations)
    `appi-` for Application Insights.
 4. Leave **Resource mode** on **Workspace-based**, then pick an existing Log
-   Analytics workspace or create one named `log-safe-agent`.
+   Analytics workspace or create one named `log-safe-agent`. Prefer creating your
+   own: the default workspace the portal offers lives in a separate
+   `DefaultResourceGroup-<region>` group, so `azd down` will leave it behind.
 5. Select **Review + create**, then **Create**.
 
 **Connect it to the project** in the [Foundry portal](https://ai.azure.com/)
@@ -152,26 +154,29 @@ with **New Foundry** enabled:
    already authenticates with `DefaultAzureCredential`.
 6. Select **Connect**.
 
-The project's managed identity needs the **Monitoring Metrics Publisher** role on
-the Application Insights resource before it can write telemetry. In the Azure
-portal, open `appi-safe-agent` > **Access control (IAM)** > **Add role
-assignment**, pick **Monitoring Metrics Publisher**, and on the **Members** tab
-select **Managed identity**, then the Foundry resource `azd provision` created.
+Connecting the resource is not enough by itself. Writing telemetry and reading it
+back are two different permissions, granted to two different principals, and
+neither comes with the Foundry roles:
 
-Reading the collected telemetry is a separate permission, and it is assigned to
-you rather than to the project. Assign **Monitoring Reader** on `appi-safe-agent`
-the same way as the Foundry User role in the previous step. The Foundry roles do
-not cover this: `Foundry User`, `Foundry Project Manager`, and `Foundry Owner`
-all show metrics but
-[not trace data](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions#agent-observability).
-`Owner` and `Contributor` on the Application Insights resource also work.
+| Principal | Role | Scope | Grants |
+| --- | --- | --- | --- |
+| The project's managed identity | **Monitoring Metrics Publisher** | `appi-safe-agent` | Sending traces |
+| You | **Monitoring Reader** | `appi-safe-agent` | Reading them back |
 
-**Monitoring Reader** at the Application Insights scope is enough on its own. Its
-`*/read` permission reaches the backing Log Analytics workspace, so no separate
-workspace assignment is needed. Add **Log Analytics Reader** at the workspace
-scope only if you want to query that workspace directly. Note that if you
-accepted the default workspace when creating the resource, it lives in a separate
-`DefaultResourceGroup-<region>` group that `azd down` will not delete.
+Assign both in the Azure portal under `appi-safe-agent` > **Access control
+(IAM)** > **Add role assignment**, the same way as the Foundry User role in the
+previous step. For the first one, select **Managed identity** on the **Members**
+tab and pick the Foundry resource `azd provision` created.
+
+Two things are easy to get wrong here. The Foundry roles look like they should
+be enough but are not: `Foundry User`, `Foundry Project Manager`, and
+`Foundry Owner` show metrics and
+[no trace data](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions#agent-observability).
+And although the traces physically land in the Log Analytics workspace, you do
+not need a role there, because the `*/read` permission in **Monitoring Reader**
+already reaches through to the workspace data. `Log Analytics Reader` at the
+workspace scope is only for querying that workspace on its own, outside the
+Application Insights resource.
 
 The [tracing documentation](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup#connect-application-insights-to-your-foundry-project)
 also describes a shortcut under **Agents** > **Traces** > **Connect**. That tab
