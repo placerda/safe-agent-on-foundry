@@ -277,11 +277,8 @@ azd deploy helpdeskbot
 If you attached Application Insights, the decisions are queryable within a few
 minutes:
 
-```bash
-az monitor app-insights query -a appi-safe-agent -g rg-safe-agent --analytics-query \
-  "dependencies | where name == 'acs.policy.evaluate'
-   | order by timestamp asc
-   | project timestamp, success, customDimensions"
+```powershell
+az monitor app-insights query -a appi-safe-agent -g rg-safe-agent --analytics-query "dependencies | where name == 'acs.policy.evaluate' | order by timestamp asc | project timestamp, success, customDimensions"
 ```
 
 A clean `locked-signin` conversation in `safe` mode produces four spans, and the
