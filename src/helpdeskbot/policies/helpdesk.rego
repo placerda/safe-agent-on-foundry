@@ -4,11 +4,19 @@ import rego.v1
 
 default verdict := {"decision": "allow"}
 
+default output_verdict := {
+    "decision": "allow",
+    "reason": "output_clear",
+    "message": "No unresolved escalation is pending for this invocation.",
+}
+
 args := object.get(input.policy_target, "value", {})
 
 safe_snapshot := object.get(input.snapshot, "safe", {})
 
 evidence := object.get(safe_snapshot, "evidence", {})
+
+escalations := object.get(safe_snapshot, "escalations", [])
 
 case_id := lower(trim_space(object.get(args, "case_id", "")))
 
@@ -178,4 +186,35 @@ else := {
         "local_remediation_available",
         false,
     ) == true
+}
+
+# --- output intervention point ---------------------------------------------
+#
+# `escalations` is a host-assembled list, one entry per case_id diagnosed
+# during this invocation: {"case_id", "local_remediation_available",
+# "ticket_exists"}. It never comes from the model. An unresolved escalation
+# is a case where diagnostics already proved no local remediation exists and
+# no escalation ticket exists yet -- the Hosted Agent must not release a
+# final response in that state.
+
+unresolved_escalation contains item if {
+    some item in escalations
+    object.get(item, "local_remediation_available", true) == false
+    object.get(item, "ticket_exists", false) != true
+}
+
+output_verdict := {
+    "decision": "deny",
+    "reason": "missing_escalation_state",
+    "message": "The host did not report escalation state for this invocation.",
+} if {
+    not is_array(escalations)
+}
+else := {
+    "decision": "deny",
+    "reason": "missing_escalation_ticket",
+    "message": "Diagnostics found no local remediation and no escalation ticket exists for the case.",
+} if {
+    is_array(escalations)
+    count(unresolved_escalation) > 0
 }

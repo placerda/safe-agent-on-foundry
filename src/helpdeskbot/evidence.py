@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import base64
 from collections.abc import Mapping
+import contextvars
 import hashlib
 import hmac
 import json
 import os
 from typing import Any
+import uuid
 
 from fixtures import ALLOWED_SERVICE, CASE_ACCOUNTS
 
@@ -17,6 +19,46 @@ EVIDENCE_SECRET_ENV = "SAFE_EVIDENCE_SECRET"
 TOKEN_VERSION = 1
 EVIDENCE_REFERENCE_PREFIX = "ev:"
 _EVIDENCE_REGISTRY: dict[str, str] = {}
+
+# Per-invocation correlation for the ACS `output` intervention point.
+#
+# One Hosted Agent process can be serving several concurrent `agent.run()`
+# invocations (different sessions, possibly the same case_id). The host must
+# never enforce the output gate using a single global "last case" value, so
+# completed decision-stage evidence is tracked per `(invocation_id, case_id)`
+# pair. `_INVOCATION_ID` is bound by `AcsOutputMiddleware` around the whole
+# tool-calling loop of one agent invocation; because that loop and every
+# nested `FunctionMiddleware` call run inside the same asyncio Task, the
+# contextvar propagates correctly across awaits without needing an agent
+# session identifier (which this sample does not reliably provide). Nothing
+# here is stored on the middleware instance itself -- `AcsOutputMiddleware`
+# and `AcsFunctionMiddleware` only ever hold a stateless `AgentControl`
+# handle -- so two concurrent invocations sharing one middleware object (and
+# one asyncio event loop) never observe each other's evidence.
+#
+# Why not thread this through `AgentContext`/`FunctionInvocationContext`
+# instead of a contextvar? The installed Agent Framework's own context
+# objects are not shared across the agent/tool-call boundary this needs to
+# cross: `AgentContext.metadata` / `.kwargs` / `.function_invocation_kwargs`
+# (read by `AcsOutputMiddleware`, an *agent*-level middleware) and
+# `FunctionInvocationContext.metadata` / `.kwargs` (read by
+# `AcsFunctionMiddleware`, a *tool-call*-level middleware) are distinct dict
+# instances -- the framework's function-calling loop constructs each
+# `FunctionInvocationContext` fresh, without copying anything from the
+# parent `AgentContext` (see `agent_framework._tools`, where
+# `FunctionInvocationContext(..., kwargs=runtime_kwargs.copy(), ...)` is
+# built with no `metadata=` argument at all). Writes a tool-call middleware
+# makes to its `FunctionInvocationContext` therefore cannot reach the
+# `AgentContext` an agent-level middleware sees later, at any installed
+# version of the framework this sample targets. A contextvar bound once per
+# `agent.run()` and read by both middleware layers is the only mechanism
+# that actually correlates them within one invocation while remaining
+# per-invocation (via `contextvars`' automatic per-`asyncio.Task` context
+# copy) rather than global.
+_INVOCATION_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "safe_invocation_id", default=None
+)
+_DECISION_EVIDENCE_BY_INVOCATION: dict[tuple[str, str], dict[str, Any]] = {}
 
 EXPECTED_INPUT_EVIDENCE = {
     "get_user_account": {
@@ -146,6 +188,76 @@ def resolve_evidence_reference(value: str) -> str:
 
 def clear_evidence_registry() -> None:
     _EVIDENCE_REGISTRY.clear()
+
+
+def new_invocation_id() -> str:
+    """Generate a fresh, unguessable id for one Hosted Agent invocation."""
+    return uuid.uuid4().hex
+
+
+def bind_invocation(invocation_id: str) -> contextvars.Token[str | None]:
+    """Bind the current asyncio context to ``invocation_id``.
+
+    Must be paired with :func:`reset_invocation` (typically in a ``finally``
+    block) so the binding never leaks past the invocation it belongs to.
+    """
+    return _INVOCATION_ID.set(invocation_id)
+
+
+def reset_invocation(token: contextvars.Token[str | None]) -> None:
+    """Undo :func:`bind_invocation` using the token it returned."""
+    _INVOCATION_ID.reset(token)
+
+
+def current_invocation_id() -> str | None:
+    """Return the invocation id bound in the current context, if any."""
+    return _INVOCATION_ID.get()
+
+
+def record_decision_evidence(case_id: str, record: dict[str, Any]) -> None:
+    """Record host-verified decision-stage evidence for the current invocation.
+
+    This is a no-op when no invocation id is bound (e.g. tool-only usage in
+    existing tests that never engage the output middleware), so it never
+    changes the behaviour of code paths that do not opt into the output
+    gate. ``record`` must only ever contain data the host itself computed
+    and already trusts (never model-authored content).
+    """
+    invocation_id = current_invocation_id()
+    if invocation_id is None:
+        return
+    normalized_case_id = case_id.strip().lower()
+    _DECISION_EVIDENCE_BY_INVOCATION[(invocation_id, normalized_case_id)] = dict(record)
+
+
+def decisions_for_invocation(invocation_id: str) -> dict[str, dict[str, Any]]:
+    """Return every case's completed decision-stage evidence for ``invocation_id``.
+
+    Keyed by case_id, scoped strictly to this invocation so wrong-case or
+    stale evidence from another invocation (or an earlier invocation that
+    reused the same case_id) can never leak in.
+    """
+    return {
+        case_id: dict(record)
+        for (recorded_invocation_id, case_id), record in _DECISION_EVIDENCE_BY_INVOCATION.items()
+        if recorded_invocation_id == invocation_id
+    }
+
+
+def clear_invocation_decisions(invocation_id: str) -> None:
+    """Forget decision evidence recorded for one completed invocation."""
+    keys = [
+        key
+        for key in _DECISION_EVIDENCE_BY_INVOCATION
+        if key[0] == invocation_id
+    ]
+    for key in keys:
+        del _DECISION_EVIDENCE_BY_INVOCATION[key]
+
+
+def clear_decision_state() -> None:
+    """Test-reset helper: forget all recorded decision-stage evidence."""
+    _DECISION_EVIDENCE_BY_INVOCATION.clear()
 
 
 def _validate_claim_schema(payload: dict[str, Any]) -> None:
@@ -379,16 +491,37 @@ def attach_result_evidence(
     else:
         raise EvidenceError(f"Unknown diagnostic tool: {tool_name}.")
 
+    evidence_reference = publish_evidence(
+        issue_evidence(
+            case_id=case_id,
+            stage=stage,
+            audience=audience,
+            sequence=sequence,
+            predecessor_id=predecessor_id,
+            facts=facts,
+        )
+    )
+
+    if stage == "decision":
+        # This is host-computed, trusted-by-construction data (never
+        # model-supplied) about to be signed into evidence the model will
+        # see only as an opaque reference. Recording it here -- rather than
+        # in the output middleware -- lets the ACS `output` gate reason
+        # about a case's diagnosis without re-deriving or re-verifying
+        # anything, and without ever trusting the model's own summary of
+        # what it found.
+        record_decision_evidence(
+            case_id,
+            {
+                "evidence_reference": evidence_reference,
+                "evidence_id": evidence_reference.removeprefix(
+                    EVIDENCE_REFERENCE_PREFIX
+                ),
+                "facts": dict(facts),
+            },
+        )
+
     return {
         **raw,
-        "evidence_reference": publish_evidence(
-            issue_evidence(
-                case_id=case_id,
-                stage=stage,
-                audience=audience,
-                sequence=sequence,
-                predecessor_id=predecessor_id,
-                facts=facts,
-            )
-        ),
+        "evidence_reference": evidence_reference,
     }

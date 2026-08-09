@@ -211,8 +211,9 @@ keeps each test independent. All users, tickets, and data are fictional and
 remain in memory.
 
 The first test resolves a problem without a ticket. The second creates a ticket
-only after collecting the required evidence. The third proves that ACS blocks a
-ticket request that skips that evidence.
+only after collecting the required evidence. The third proves both halves of the
+runtime boundary: ACS blocks a premature ticket, then the output gate refuses to
+finish the locked-account run until one policy-approved ticket exists.
 
 #### Test 1: resolve a problem without a ticket
 
@@ -244,6 +245,10 @@ The response should report ticket `MOCK-0001` in the `access` category with
 `medium` severity. The ticket is marked `mock-created` and `in-memory-only`; it
 is not sent to a real support system. In the Foundry trajectory, the ticket tool
 must appear only after the system, account, and knowledge-base checks.
+If the model omits the ticket, `AcsOutputMiddleware` detects the missing
+required handoff after the response is assembled and creates the same ticket
+from verified evidence. That host-created call still passes through ACS
+`pre_tool_call`; it is not a policy bypass.
 
 #### Test 3: prove that ACS blocks an unsafe request
 
@@ -267,6 +272,13 @@ attempt should be blocked by ACS with `blocked_by_acs` and
 `unanchored_decision`. The agent should then continue with the permitted
 diagnostic steps before creating the justified mock ticket.
 
+After `search_kb` proves that no approved local remediation exists, one of two
+safe paths completes the request. The model may retry the ticket with the valid
+evidence reference, or the host may detect the missing ticket at ACS `output`
+and create it through the same `pre_tool_call` policy. In either case, the final
+message must report one ticket such as `MOCK-0001`; a response that leaves the
+locked case without a ticket is not released.
+
 Restore the safe prompt when you finish:
 
 ```powershell
@@ -274,43 +286,98 @@ azd env set HELPDESKBOT_MODE safe
 azd deploy helpdeskbot
 ```
 
-If you attached Application Insights, open **Application Insights** >
-**appi-safe-agent** > **Logs** in the Azure portal. Paste this query and select
-**Run**:
+If you attached Application Insights, the decisions are queryable within a few
+minutes. Open **Application Insights** > `appi-safe-agent` > **Logs**, paste this
+KQL query, and select **Run**:
 
-```kusto
+```kql
 dependencies
 | where name == "acs.policy.evaluate"
-| extend
-    Tool = tostring(customDimensions["acs.tool.name"]),
-    Intervention = tostring(customDimensions["acs.intervention_point"]),
-    Verdict = tostring(customDimensions["acs.verdict"]),
-    Reason = tostring(customDimensions["acs.reason"]),
-    EvidenceStage = tostring(customDimensions["safe.evidence.stage"]),
-    EvidenceValid = tobool(customDimensions["safe.evidence.valid"])
-| order by timestamp desc
+| order by timestamp asc
 | project
-    Time = format_datetime(timestamp, "yyyy-MM-dd HH:mm:ss"),
-    Outcome = iff(tobool(success), "ALLOW", "DENY"),
-    Tool,
-    Intervention,
-    Verdict,
-    Reason,
-    EvidenceStage,
-    EvidenceValid
+    timestamp,
+    operation_Id,
+    operation_ParentId,
+    id,
+    success,
+    tool = tostring(customDimensions["acs.tool.name"]),
+    intervention_point = tostring(customDimensions["acs.intervention_point"]),
+    verdict = tostring(customDimensions["acs.verdict"]),
+    reason = tostring(customDimensions["acs.reason"]),
+    post_tool_call_verdict = tostring(customDimensions["acs.post_tool_call.verdict"]),
+    evidence_valid = tostring(customDimensions["safe.evidence.valid"]),
+    evidence_id = tostring(customDimensions["safe.evidence.id"]),
+    evidence_stage = tostring(customDimensions["safe.evidence.stage"]),
+    evidence_reason = tostring(customDimensions["safe.evidence.reason"]),
+    host_ticket_count = toint(customDimensions["safe.escalation.ticket_count"])
 ```
 
-A clean `locked-signin` conversation in `safe` mode produces four spans, and the
-`safe.evidence.stage` column advancing is Flow Integrity made queryable:
+The equivalent PowerShell command is:
 
-| # | `acs.tool.name` | `success` | `acs.verdict` | `safe.evidence.stage` |
-| --- | --- | --- | --- | --- |
-| 1 | `get_system_status` | `True` | allow | `start` |
-| 2 | `get_user_account` | `True` | allow | `system_status` |
-| 3 | `search_kb` | `True` | allow | `account` |
-| 4 | `create_escalation_ticket` | `True` | allow | `decision` |
+```powershell
+$query = @'
+dependencies
+| where name == "acs.policy.evaluate"
+| order by timestamp asc
+| project timestamp, operation_Id, operation_ParentId, id, success,
+    tool = tostring(customDimensions["acs.tool.name"]),
+    intervention_point = tostring(customDimensions["acs.intervention_point"]),
+    verdict = tostring(customDimensions["acs.verdict"]),
+    reason = tostring(customDimensions["acs.reason"]),
+    post_tool_call_verdict = tostring(customDimensions["acs.post_tool_call.verdict"]),
+    evidence_valid = tostring(customDimensions["safe.evidence.valid"]),
+    evidence_id = tostring(customDimensions["safe.evidence.id"]),
+    evidence_stage = tostring(customDimensions["safe.evidence.stage"]),
+    evidence_reason = tostring(customDimensions["safe.evidence.reason"]),
+    host_ticket_count = toint(customDimensions["safe.escalation.ticket_count"])
+'@
+az monitor app-insights query -a appi-safe-agent -g rg-safe-agent --analytics-query $query
+```
+
+Indexing a key that a given span never set (for example `safe.evidence.id` on
+the bootstrap span) returns an empty value instead of an error, so this
+projection is safe to run across every row `name == 'acs.policy.evaluate'`
+returns, verified and denied alike.
+
+`operation_Id` is the trace ID: every span produced while handling one request
+shares it, so filtering on it reconstructs one full run, in order, regardless of
+how many tools it called. `id` identifies one dependency span, the single
+`acs.policy.evaluate` call, and `operation_ParentId` names the span that
+invoked it. To pull one run once you have an `operation_Id` from a prior query
+or from the portal's end-to-end transaction view:
+
+```kql
+| where operation_Id == '<operation_Id from a previous row>'
+```
+
+To isolate one span:
+
+```kql
+| where id == '<id from a previous row>'
+```
+
+Each request starts a new conversation, so `operation_Id` is also the
+practical stand-in for "one conversation" here. This sample does not emit a
+`session_id`, `conversation_id`, or `agent_id` custom dimension, so there is no
+`where` clause that narrows to one session or one agent; do not invent one.
+
+A clean `locked-signin` conversation in `safe` mode typically produces five
+policy spans. The first four govern tools; the fifth governs the assembled
+response. The `safe.evidence.stage` column advancing is Flow Integrity made
+queryable:
+
+| # | `acs.tool.name` | intervention point | `success` | `acs.verdict` | `acs.reason` | evidence stage |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `get_system_status` | `pre_tool_call` | `True` | allow | *(empty)* | `start` |
+| 2 | `get_user_account` | `pre_tool_call` | `True` | allow | *(empty)* | `system_status` |
+| 3 | `search_kb` | `pre_tool_call` | `True` | allow | *(empty)* | `account` |
+| 4 | `create_escalation_ticket` | `pre_tool_call` | `True` | allow | *(empty)* | `decision` |
+| 5 | *(empty)* | `output` | `True` | allow | `output_clear` | *(empty)* |
 
 Span 1 has a stage but no `safe.evidence.id`, because it is the bootstrap call.
+If the host creates the missing ticket, the same trace contains a nested
+`create_escalation_ticket` policy span and the output span carries
+`host_ticket_count=1`.
 
 In `vulnerable` mode the same conversation prepends a denial:
 
@@ -413,7 +480,7 @@ ACS owns the decision.
 | Scope | Rego limits the agent to two identity cases and medium access tickets; PII, other severities, and other categories are denied | `test_scope_boundary_blocks_high_or_non_access_tickets`, `test_email_in_summary_has_highest_priority` |
 | Anchored Decisions | The host validates raw tool output, signs the evidence envelope, stores it server-side, and gives the model only a reference | `test_signature_tampering_is_rejected`, `test_fabricated_escalation_evidence_is_blocked` |
 | Flow Integrity | Each step consumes evidence issued for the next tool; skipped, reordered, or cross-case prerequisites fail closed | `test_skipped_diagnostic_prerequisite_is_blocked`, `test_missing_cross_case_and_reordered_references_are_untrusted` |
-| Escalation | A known local remediation blocks ticket creation; verified no-remediation evidence permits exactly one handoff | `test_known_local_remediation_blocks_escalation`, `test_anchored_no_remediation_ticket_is_allowed` |
+| Escalation | A known local remediation blocks ticket creation; verified no-remediation evidence requires one ticket before `output` can leave, and the host creates it through the same policy when the model omits it | `test_known_local_remediation_blocks_escalation`, `test_host_creates_exactly_one_valid_ticket_when_required`, `test_missing_ticket_cannot_leave_the_host_when_remediation_is_unavailable` |
 
 ### Repository map
 
@@ -422,7 +489,7 @@ ACS owns the decision.
 | `src/helpdeskbot/main.py` | Responses `2.0.0` Hosted Agent entry point |
 | `src/helpdeskbot/tools.py` | Four deterministic, in-memory tools |
 | `src/helpdeskbot/evidence.py` | Evidence issuance, registry, verification, and ACS snapshot projection |
-| `src/helpdeskbot/acs_middleware.py` | The enforcement point: fail-closed Agent Framework middleware |
+| `src/helpdeskbot/acs_middleware.py` | Fail-closed function and output middleware, including deterministic handoff completion |
 | `src/helpdeskbot/policies/` | ACS manifest and the Rego policy for all four principles |
 | `src/helpdeskbot/eval.yaml` | Native Foundry evaluation recipe |
 | `evaluation/assert_suite/` | SAFE behavior spec, target, and ASSERT pipeline |
@@ -436,22 +503,24 @@ Agent Framework emits GenAI spans such as `execute_tool get_system_status` for
 every call the middleware lets through.
 
 On top of that, `acs_middleware.py` opens one `acs.policy.evaluate` span per
-governed invocation, which turns a policy decision into something you can query
-instead of something you infer from a log line:
+governed tool or output check, which turns a policy decision into something you
+can query instead of something you infer from a log line:
 
 | Attribute | Always present | Meaning |
 | --- | --- | --- |
-| `acs.tool.name` | yes | The tool the model proposed |
-| `acs.intervention_point` | yes | `pre_tool_call`, or the point that blocked the call |
-| `acs.verdict` | yes | `allow`, `deny`, `warn`, `transform`, or `escalate` |
+| `acs.tool.name` | tool checks | The tool the model or host proposed |
+| `acs.intervention_point` | yes | `pre_tool_call`, `post_tool_call`, or `output` |
+| `acs.verdict` | completed policy evaluations | `allow`, `deny`, `warn`, `transform`, or `escalate` |
 | `acs.reason` | when the verdict carries one | The policy reason code, such as `unanchored_decision` |
 | `acs.post_tool_call.verdict` | when ACS returns one | The post-execution decision |
-| `safe.evidence.valid` | yes | Whether the host verified the evidence behind the call |
+| `safe.evidence.valid` | tool checks | Whether the host verified the evidence behind the call |
 | `safe.evidence.id`, `.stage`, `.audience` | for verified evidence | Identifiers from the verified envelope |
 | `safe.evidence.reason` | when verification failed | A bounded failure code, never the rejection sentence |
+| `safe.escalation.ticket_count` | when the output gate creates a handoff | Number of required tickets confirmed by host remediation |
 
-Only the three marked `yes` are guaranteed, so treat the rest as conditional
-dimensions in queries. A denial also sets the span status to `ERROR`. What is
+Treat every field except `acs.intervention_point` as conditional because tool
+and output snapshots carry different state. A denial also sets the span status
+to `ERROR`. What is
 deliberately absent: the signed envelope, the HMAC key, the verified facts, the
 tool arguments, and stack traces. The span uses `record_exception=False`, so even
 the error status carries only a code.
@@ -508,20 +577,23 @@ python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-The policy tests run the real ACS runtime and real OPA. They assert both the
+The current suite reports `67 passed`. The policy tests run the real ACS runtime
+and real OPA. They assert both the
 verdict and the absence of the protected callback, which is what proves a
 pre-tool denial actually prevented the side effect.
 
 The model is not deterministic enough to reproduce every policy boundary on
-demand, so this script sends five controlled snapshots through the same manifest
-and Rego policy:
+demand, so this script sends five controlled tool snapshots and two output
+snapshots through the same manifest and Rego policy:
 
 ```bash
 python scripts/show_safe_controls.py
 ```
 
 The first four each violate one SAFE principle and are denied before the callback
-runs. The fifth is a valid handoff:
+runs. The fifth is a valid handoff. Two more checks exercise ACS `output`: one
+blocks a final response with a missing required ticket, and one allows the same
+response state after the ticket exists.
 
 ```text
 Check                ACS result                                 Tool executed
@@ -531,6 +603,11 @@ Anchored Decisions   deny: unanchored_decision                  false
 Flow Integrity       deny: flow_integrity_violation             false
 Escalation           deny: local_remediation_available          false
 Valid handoff        allow                                      true
+
+Output check         ACS result
+----------------------------------------------------------------
+Missing handoff      deny: missing_escalation_ticket
+Completed handoff    allow
 ```
 
 ### Evaluate trajectories with ASSERT
@@ -590,6 +667,10 @@ capability store needs durability, session scoping, expiry, nonce and replay
 protection, key rotation, deployment binding, replica-safe lookup, secret storage
 in Azure Key Vault retrieved with the agent's Entra identity, and durable audit
 correlation. Never expose the signing key or the signed envelope to the model.
+
+The sample accepts only non-streaming responses because the complete output must
+be evaluated before any token leaves the host. A production streaming design
+must buffer the response until the output verdict is known.
 
 The middleware converts only expected `pre_tool_call` denials into a structured
 tool result. Post-tool denial, policy runtime failure, malformed evidence, and

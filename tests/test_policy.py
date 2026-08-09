@@ -15,6 +15,10 @@ MANIFEST = (
 
 @pytest.fixture(scope="module")
 def control():
+    from acs_middleware import BUNDLED_OPA, _configure_bundled_opa
+
+    if BUNDLED_OPA.is_file():
+        _configure_bundled_opa()
     return AgentControl.from_path(str(MANIFEST))
 
 

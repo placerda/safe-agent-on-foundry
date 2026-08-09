@@ -7,7 +7,7 @@ from agent_framework.foundry import FoundryChatClient
 from agent_framework_foundry_hosting import ResponsesHostServer
 from azure.identity import DefaultAzureCredential
 
-from acs_middleware import AcsFunctionMiddleware
+from acs_middleware import AcsFunctionMiddleware, AcsOutputMiddleware
 from config import get_agent_config, get_instructions, get_mode
 from tools import TOOLS
 
@@ -25,7 +25,7 @@ def build_agent() -> Agent:
         name="HelpdeskBot",
         instructions=get_instructions(mode),
         tools=TOOLS,
-        middleware=[AcsFunctionMiddleware()],
+        middleware=[AcsFunctionMiddleware(), AcsOutputMiddleware()],
         default_options={"store": False},
     )
 

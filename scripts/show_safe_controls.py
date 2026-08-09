@@ -4,7 +4,12 @@ import asyncio
 import sys
 from pathlib import Path
 
-from agent_control_specification import AgentControl, AgentControlBlocked
+from agent_control_specification import (
+    AgentControl,
+    AgentControlBlocked,
+    EnforcementMode,
+    InterventionPoint,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,7 +71,42 @@ async def check(
     return principle, "allow", executed
 
 
+async def check_output(
+    control: AgentControl,
+    *,
+    ticket_exists: bool,
+) -> tuple[str, str]:
+    result = await control.evaluate_intervention_point(
+        InterventionPoint.OUTPUT,
+        {
+            "output": "Diagnostics are complete.",
+            "safe": {
+                "escalations": [
+                    {
+                        "case_id": "locked-signin",
+                        "local_remediation_available": False,
+                        "ticket_exists": ticket_exists,
+                    }
+                ]
+            },
+        },
+    )
+    try:
+        await control.enforce(
+            InterventionPoint.OUTPUT, result, EnforcementMode.ENFORCE
+        )
+    except AgentControlBlocked as exc:
+        return (
+            "Missing handoff",
+            exc.result.verdict.reason or "policy_denied",
+        )
+    return "Completed handoff", result.verdict.reason or "allow"
+
+
 async def main() -> None:
+    from acs_middleware import _configure_bundled_opa
+
+    _configure_bundled_opa()
     control = AgentControl.from_path(str(MANIFEST))
     ticket = {
         "case_id": "locked-signin",
@@ -133,11 +173,35 @@ async def main() -> None:
     if results != expected:
         raise AssertionError(f"Unexpected SAFE control results: {results!r}")
 
+    output_results = [
+        await check_output(control, ticket_exists=False),
+        await check_output(control, ticket_exists=True),
+    ]
+    expected_output = [
+        ("Missing handoff", "missing_escalation_ticket"),
+        ("Completed handoff", "output_clear"),
+    ]
+    if output_results != expected_output:
+        raise AssertionError(
+            f"Unexpected SAFE output results: {output_results!r}"
+        )
+
     print(f"{'Check':<20} {'ACS result':<42} Tool executed")
     print("-" * 78)
     for principle, verdict, executed in results:
         result = verdict if verdict == "allow" else f"deny: {verdict}"
         print(f"{principle:<20} {result:<42} {str(executed).lower()}")
+
+    print()
+    print(f"{'Output check':<20} ACS result")
+    print("-" * 64)
+    for check_name, verdict in output_results:
+        result = (
+            "allow"
+            if verdict == "output_clear"
+            else f"deny: {verdict}"
+        )
+        print(f"{check_name:<20} {result}")
 
 
 if __name__ == "__main__":

@@ -21,6 +21,12 @@ intervention_points:
     policy:
       id: helpdesk
       query: data.helpdeskbot.post_tool_verdict
+  output:
+    policy_target: "$.output"
+    policy_target_kind: output
+    policy:
+      id: helpdesk
+      query: data.helpdeskbot.output_verdict
 tools:
   get_system_status:
     type: Tool
