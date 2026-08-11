@@ -14,13 +14,11 @@ from evidence import (
 
 def decision_facts(
     *,
-    account_alias: str = "locked-user",
     local_remediation_available: bool = False,
 ) -> dict:
     return {
         "service": "identity",
         "service_state": "operational",
-        "account_alias": account_alias,
         "account_found": True,
         "account_state": "locked",
         "sign_in_allowed": False,
@@ -117,7 +115,6 @@ def test_host_issues_complete_chained_evidence_from_raw_results():
     )
     account_input = {
         "case_id": "locked-signin",
-        "account_alias": "locked-user",
         "service_evidence_reference": status["evidence_reference"],
     }
     account_prior = evidence_snapshot_for_call("get_user_account", account_input)
@@ -125,7 +122,6 @@ def test_host_issues_complete_chained_evidence_from_raw_results():
         "get_user_account",
         account_input,
         {
-            "account_alias": "locked-user",
             "found": True,
             "state": "locked",
             "sign_in_allowed": False,
@@ -211,7 +207,7 @@ def test_host_accepts_framework_function_result_wrapper():
     )
 
 
-def test_host_rejects_result_that_changes_the_evidence_subject():
+def test_host_rejects_account_result_with_wrong_fact_type():
     status_token = issue_evidence(
         case_id="locked-signin",
         stage="system_status",
@@ -222,21 +218,18 @@ def test_host_rejects_result_that_changes_the_evidence_subject():
     )
     arguments = {
         "case_id": "locked-signin",
-        "account_alias": "locked-user",
         "service_evidence_reference": status_token,
     }
     prior = evidence_snapshot_for_call("get_user_account", arguments)
 
-    with pytest.raises(EvidenceError, match="outside the case scope"):
+    with pytest.raises(EvidenceError, match="missing or invalid"):
         attach_result_evidence(
             "get_user_account",
             arguments,
             {
-                "account_alias": "alex-user",
                 "found": True,
                 "state": "active",
-                "sign_in_allowed": True,
-                "token_state": "expired",
+                "sign_in_allowed": "yes",
             },
             prior,
         )

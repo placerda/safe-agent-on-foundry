@@ -23,20 +23,20 @@ def snapshot(
     valid: bool = True,
     sequence: list[str] | None = None,
     case_id: str = "locked-signin",
-    account_alias: str = "locked-user",
+    stage: str = "decision",
+    audience: str = "create_escalation_ticket",
     local_remediation_available: bool = False,
 ) -> dict:
     return {
         "safe": {
             "evidence": {
                 "valid": valid,
-                "stage": "decision",
-                "audience": "create_escalation_ticket",
+                "stage": stage,
+                "audience": audience,
                 "case_id": case_id,
                 "sequence": sequence
                 or ["get_system_status", "get_user_account", "search_kb"],
                 "facts": {
-                    "account_alias": account_alias,
                     "local_remediation_available": local_remediation_available,
                 },
             }
@@ -111,9 +111,7 @@ async def main() -> None:
     ticket = {
         "case_id": "locked-signin",
         "category": "access",
-        "summary": "Locked account has no local remediation",
         "severity": "medium",
-        "account_alias": "locked-user",
         "decision_evidence_reference": "ev:demo",
     }
 
@@ -137,7 +135,11 @@ async def main() -> None:
             "Flow Integrity",
             tool_name="search_kb",
             arguments={"case_id": "locked-signin", "query": "locked account"},
-            evidence=snapshot(valid=False),
+            evidence=snapshot(
+                stage="account",
+                audience="search_kb",
+                sequence=["get_system_status"],
+            ),
         ),
         await check(
             control,
@@ -146,11 +148,9 @@ async def main() -> None:
             arguments={
                 **ticket,
                 "case_id": "token-expired-signin",
-                "account_alias": "alex-user",
             },
             evidence=snapshot(
                 case_id="token-expired-signin",
-                account_alias="alex-user",
                 local_remediation_available=True,
             ),
         ),

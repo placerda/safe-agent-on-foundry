@@ -51,7 +51,7 @@ async def invoke(middleware, tool_name, arguments, implementation):
     return context.result
 
 
-async def diagnostic_flow(case_id: str, account_alias: str):
+async def diagnostic_flow(case_id: str):
     """Run the standard get_system_status -> get_user_account -> search_kb flow."""
     middleware = AcsFunctionMiddleware()
     status = await invoke(
@@ -65,7 +65,6 @@ async def diagnostic_flow(case_id: str, account_alias: str):
         "get_user_account",
         {
             "case_id": case_id,
-            "account_alias": account_alias,
             "service_evidence_reference": status["evidence_reference"],
         },
         _get_user_account,
@@ -116,7 +115,7 @@ async def test_output_allowed_without_ticket_when_local_remediation_exists():
     middleware = AcsOutputMiddleware()
 
     async def produce_response():
-        _, _, _, kb = await diagnostic_flow("token-expired-signin", "alex-user")
+        _, _, _, kb = await diagnostic_flow("token-expired-signin")
         assert kb["evidence_reference"]  # sanity: the diagnostic flow itself ran
         return SimpleNamespace(text="Your sign-in token will refresh automatically.")
 
@@ -144,7 +143,7 @@ async def test_missing_ticket_cannot_leave_the_host_when_remediation_is_unavaila
     )
 
     async def produce_response():
-        await diagnostic_flow("locked-signin", "locked-user")
+        await diagnostic_flow("locked-signin")
         return SimpleNamespace(text="No local remediation was found.")
 
     context, call_count = await run_output_expect_blocked(middleware, produce_response)
@@ -161,7 +160,7 @@ async def test_host_creates_exactly_one_valid_ticket_when_required():
     middleware = AcsOutputMiddleware()
 
     async def produce_response():
-        await diagnostic_flow("locked-signin", "locked-user")
+        await diagnostic_flow("locked-signin")
         return AgentResponse(
             messages=[
                 Message("assistant", []),
@@ -177,13 +176,12 @@ async def test_host_creates_exactly_one_valid_ticket_when_required():
     assert len(tickets) == 1
     ticket = tickets[0]
     assert ticket["case_id"] == "locked-signin"
-    assert ticket["account_alias"] == "locked-user"
     assert ticket["category"] == "access"
     assert ticket["severity"] == "medium"
     assert ticket["ticket_id"] == "MOCK-0001"
     assert context.result.text == (
         "HelpdeskBot completed the required human handoff. "
-        "Support ticket MOCK-0001 was created for locked-user with "
+        "Support ticket MOCK-0001 was created for case locked-signin with "
         "category access and medium severity."
     )
     assert "No local remediation was found." not in context.result.text
@@ -202,7 +200,7 @@ async def test_completed_invocation_discards_decision_state(monkeypatch):
     middleware = AcsOutputMiddleware()
 
     async def produce_response():
-        await diagnostic_flow("locked-signin", "locked-user")
+        await diagnostic_flow("locked-signin")
         return SimpleNamespace(text="No local remediation was found.")
 
     await run_output(middleware, produce_response)
@@ -220,7 +218,7 @@ async def test_failed_invocation_discards_decision_state(monkeypatch):
     middleware = AcsOutputMiddleware()
 
     async def produce_response():
-        await diagnostic_flow("locked-signin", "locked-user")
+        await diagnostic_flow("locked-signin")
         raise RuntimeError("simulated model failure")
 
     with pytest.raises(RuntimeError, match="simulated model failure"):
@@ -270,17 +268,16 @@ async def test_stale_or_mismatched_decision_facts_cannot_trigger_a_ticket():
     middleware = AcsOutputMiddleware()
 
     async def produce_response():
-        _, _, _, kb = await diagnostic_flow("locked-signin", "locked-user")
-        # Overwrite this invocation's recorded decision with facts that no
-        # longer match what `kb["evidence_reference"]` cryptographically
-        # proves (the real evidence is for "locked-user").
+        _, _, _, kb = await diagnostic_flow("locked-signin")
+        # Replace this invocation's record with a different case while keeping
+        # evidence that cryptographically proves locked-signin.
+        evidence.clear_decision_state()
         evidence.record_decision_evidence(
-            "locked-signin",
+            "token-expired-signin",
             {
                 "evidence_reference": kb["evidence_reference"],
                 "facts": {
                     "local_remediation_available": False,
-                    "account_alias": "someone-else",
                 },
             },
         )
@@ -304,7 +301,7 @@ async def test_acs_evaluation_failure_fails_closed(monkeypatch):
     monkeypatch.setattr(middleware._control, "evaluate_intervention_point", boom)
 
     async def produce_response():
-        await diagnostic_flow("token-expired-signin", "alex-user")
+        await diagnostic_flow("token-expired-signin")
         return SimpleNamespace(text="Your sign-in token will refresh automatically.")
 
     context, _ = await run_output_expect_blocked(middleware, produce_response)
@@ -320,7 +317,7 @@ async def test_repeated_output_evaluation_is_idempotent():
     middleware = AcsOutputMiddleware()
 
     async def produce_response():
-        await diagnostic_flow("locked-signin", "locked-user")
+        await diagnostic_flow("locked-signin")
         return SimpleNamespace(text="No local remediation was found.")
 
     first = await run_output(middleware, produce_response)
@@ -341,7 +338,7 @@ async def test_enforce_output_invoked_twice_for_same_invocation_creates_no_extra
     invocation_id = new_invocation_id()
     token = bind_invocation(invocation_id)
     try:
-        await diagnostic_flow("locked-signin", "locked-user")
+        await diagnostic_flow("locked-signin")
     finally:
         reset_invocation(token)
 
@@ -397,7 +394,6 @@ async def test_model_initiated_ticket_creation_still_works_alongside_output_gate
             "get_user_account",
             {
                 "case_id": "locked-signin",
-                "account_alias": "locked-user",
                 "service_evidence_reference": status["evidence_reference"],
             },
             _get_user_account,
@@ -418,9 +414,7 @@ async def test_model_initiated_ticket_creation_still_works_alongside_output_gate
             {
                 "case_id": "locked-signin",
                 "category": "access",
-                "summary": "Locked account has no local remediation",
                 "severity": "medium",
-                "account_alias": "locked-user",
                 "decision_evidence_reference": kb["evidence_reference"],
             },
             _create_escalation_ticket,
@@ -456,12 +450,12 @@ async def test_concurrent_invocations_for_different_cases_do_not_cross_contamina
     middleware = AcsOutputMiddleware()
 
     async def resolved_case():
-        _, _, _, kb = await diagnostic_flow("token-expired-signin", "alex-user")
+        _, _, _, kb = await diagnostic_flow("token-expired-signin")
         assert kb["evidence_reference"]
         return SimpleNamespace(text="Your sign-in token will refresh automatically.")
 
     async def unresolved_case():
-        await diagnostic_flow("locked-signin", "locked-user")
+        await diagnostic_flow("locked-signin")
         return SimpleNamespace(text="No local remediation was found.")
 
     resolved_context, unresolved_context = await asyncio.gather(
@@ -493,7 +487,7 @@ async def test_concurrent_invocations_for_same_case_create_only_one_ticket():
     middleware = AcsOutputMiddleware()
 
     async def unresolved_case():
-        await diagnostic_flow("locked-signin", "locked-user")
+        await diagnostic_flow("locked-signin")
         return SimpleNamespace(text="No local remediation was found.")
 
     first_context, second_context = await asyncio.gather(

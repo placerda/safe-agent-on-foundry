@@ -157,7 +157,7 @@ def _host_escalation_response(
         text = (
             "HelpdeskBot completed the required human handoff. "
             f"Support ticket {ticket['ticket_id']} was created for "
-            f"{ticket['account_alias']} with category {ticket['category']} "
+            f"case {ticket['case_id']} with category {ticket['category']} "
             f"and {ticket['severity']} severity."
         )
     else:
@@ -493,10 +493,7 @@ class AcsOutputMiddleware(AgentMiddleware):
                 continue  # Already ticketed; creating again would duplicate.
 
             evidence_reference = record.get("evidence_reference")
-            account_alias = facts.get("account_alias")
-            if not isinstance(evidence_reference, str) or not isinstance(
-                account_alias, str
-            ):
+            if not isinstance(evidence_reference, str):
                 # Incomplete host-recorded state for this case. There is
                 # nothing verified to build a ticket from, so this case is
                 # left unresolved rather than guessed at.
@@ -506,11 +503,6 @@ class AcsOutputMiddleware(AgentMiddleware):
                 "case_id": case_id,
                 "category": ALLOWED_TICKET_CATEGORY,
                 "severity": ALLOWED_TICKET_SEVERITY,
-                "account_alias": account_alias,
-                "summary": (
-                    f"Escalation required for case {case_id}: diagnostics "
-                    "found no local remediation available."
-                ),
                 "decision_evidence_reference": evidence_reference,
             }
             prior_evidence = evidence_snapshot_for_call(

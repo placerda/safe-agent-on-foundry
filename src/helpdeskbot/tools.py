@@ -12,7 +12,8 @@ from fixtures import (
     ALLOWED_SERVICE,
     ALLOWED_TICKET_CATEGORY,
     ALLOWED_TICKET_SEVERITY,
-    CASE_ACCOUNTS,
+    CASE_ACCOUNT_STATES,
+    SUPPORTED_CASES,
 )
 
 
@@ -29,7 +30,7 @@ _TICKETS: list[dict[str, str]] = []
 def _get_system_status(case_id: str, service: str) -> dict[str, str]:
     normalized_case = case_id.strip().lower()
     normalized_service = service.strip().lower()
-    if normalized_case not in CASE_ACCOUNTS or normalized_service != ALLOWED_SERVICE:
+    if normalized_case not in SUPPORTED_CASES or normalized_service != ALLOWED_SERVICE:
         raise ValueError("Case or service is outside HelpdeskBot scope.")
     return {
         "service": normalized_service,
@@ -40,43 +41,19 @@ def _get_system_status(case_id: str, service: str) -> dict[str, str]:
 
 
 def _get_user_account(
-    case_id: str, account_alias: str, service_evidence_reference: str
+    case_id: str, service_evidence_reference: str
 ) -> dict[str, str | bool]:
     normalized_case = case_id.strip().lower()
-    normalized_alias = account_alias.strip().lower()
-    if (
-        normalized_case not in CASE_ACCOUNTS
-        or CASE_ACCOUNTS[normalized_case] != normalized_alias
-        or not service_evidence_reference
-    ):
-        raise ValueError("Case, account, or prerequisite is outside scope.")
-
-    accounts: dict[str, dict[str, str | bool]] = {
-        "alex-user": {
-            "account_alias": "alex-user",
-            "found": True,
-            "state": "active",
-            "sign_in_allowed": True,
-            "token_state": "expired",
-            "source": "in-memory-mock",
-        },
-        "locked-user": {
-            "account_alias": "locked-user",
-            "found": True,
-            "state": "locked",
-            "sign_in_allowed": False,
-            "token_state": "valid",
-            "source": "in-memory-mock",
-        },
-    }
-    return accounts[normalized_alias]
+    if normalized_case not in SUPPORTED_CASES or not service_evidence_reference:
+        raise ValueError("Case or prerequisite is outside scope.")
+    return CASE_ACCOUNT_STATES[normalized_case].copy()
 
 
 def _search_kb(
     case_id: str, query: str, account_evidence_reference: str
 ) -> dict[str, str | list[str]]:
     normalized_case = case_id.strip().lower()
-    if normalized_case not in CASE_ACCOUNTS or not account_evidence_reference:
+    if normalized_case not in SUPPORTED_CASES or not account_evidence_reference:
         raise ValueError("Case or prerequisite is outside scope.")
     if not query.strip():
         raise ValueError("KB query is required.")
@@ -105,20 +82,15 @@ def _search_kb(
 def _create_escalation_ticket(
     case_id: str,
     category: str,
-    summary: str,
     severity: str,
-    account_alias: str,
     decision_evidence_reference: str,
 ) -> dict[str, str]:
     normalized_case = case_id.strip().lower()
-    normalized_alias = account_alias.strip().lower()
     if (
         normalized_case != "locked-signin"
-        or normalized_alias != CASE_ACCOUNTS["locked-signin"]
         or category.strip().lower() != ALLOWED_TICKET_CATEGORY
         or severity.strip().lower() != ALLOWED_TICKET_SEVERITY
         or not decision_evidence_reference
-        or "@" in summary
     ):
         raise ValueError("Ticket request is outside HelpdeskBot scope.")
 
@@ -133,9 +105,8 @@ def _create_escalation_ticket(
         "ticket_id": f"MOCK-{len(_TICKETS) + 1:04d}",
         "case_id": normalized_case,
         "category": ALLOWED_TICKET_CATEGORY,
-        "summary": summary.strip(),
+        "summary": "Locked sign-in case requires human support.",
         "severity": ALLOWED_TICKET_SEVERITY,
-        "account_alias": normalized_alias,
         "idempotency_scope": normalized_case,
         "state": "mock-created",
         "destination": "in-memory-only",
@@ -171,15 +142,6 @@ def get_user_account(
     case_id: Annotated[
         str, Field(description="The same fictional case ID used for service status.")
     ],
-    account_alias: Annotated[
-        str,
-        Field(
-            description=(
-                'Use exactly "alex-user" for token-expired-signin or "locked-user" '
-                "for locked-signin."
-            )
-        ),
-    ],
     service_evidence_reference: Annotated[
         str,
         Field(
@@ -190,8 +152,8 @@ def get_user_account(
         ),
     ],
 ) -> dict[str, str | bool]:
-    """Return non-PII account state from the local mock catalog."""
-    return _get_user_account(case_id, account_alias, service_evidence_reference)
+    """Return account state for a case without exposing a user identifier."""
+    return _get_user_account(case_id, service_evidence_reference)
 
 
 @tool(approval_mode="never_require", result_parser=SKIP_PARSING)
@@ -222,13 +184,9 @@ def create_escalation_ticket(
     category: Annotated[
         str, Field(description="Must be access for this bounded sample.")
     ],
-    summary: Annotated[str, Field(description="Brief non-PII issue summary.")],
     severity: Annotated[
         Literal["low", "medium", "high"],
         Field(description="Must be medium for this bounded sample."),
-    ],
-    account_alias: Annotated[
-        str, Field(description="Must be the fictional locked-user alias.")
     ],
     decision_evidence_reference: Annotated[
         str,
@@ -244,9 +202,7 @@ def create_escalation_ticket(
     return _create_escalation_ticket(
         case_id,
         category,
-        summary,
         severity,
-        account_alias,
         decision_evidence_reference,
     )
 

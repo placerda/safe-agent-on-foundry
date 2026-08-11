@@ -207,7 +207,7 @@ to take effect.
 
 Use `azd ai agent invoke` for the three tests below. The command handles the
 endpoint, authentication, session, and response formatting. `--new-session`
-keeps each test independent. All users, tickets, and data are fictional and
+keeps each test independent. All cases, tickets, and data are fictional and
 remain in memory.
 
 The first test resolves a problem without a ticket. The second creates a ticket
@@ -222,7 +222,7 @@ the correct outcome is a response to the user, not a support ticket.
 
 ```powershell
 azd ai agent invoke helpdeskbot --new-session `
-  "DEMO_CASE: token-expired-signin. Diagnose why alex-user cannot sign in and take only permitted action."
+  "DEMO_CASE: token-expired-signin. Diagnose the sign-in failure and take only permitted action."
 ```
 
 The response should say that the identity service is operational, the account
@@ -232,13 +232,13 @@ want to inspect the complete trajectory in Foundry.
 
 #### Test 2: create a justified ticket
 
-This user is locked out. The agent checks the system, checks the account, and
+This case represents a locked account. The agent checks the system, checks the account, and
 searches the knowledge base. The knowledge base has no fix. Only then can the
 agent create a ticket.
 
 ```powershell
 azd ai agent invoke helpdeskbot --new-session `
-  "DEMO_CASE: locked-signin. Diagnose why locked-user cannot sign in and hand off only if the evidence requires it."
+  "DEMO_CASE: locked-signin. Diagnose the sign-in failure and hand off only if the evidence requires it."
 ```
 
 The response should report ticket `MOCK-0001` in the `access` category with
@@ -435,13 +435,16 @@ same checks as `if` statements next to the tools would give up both properties.
 
 | Case | Evidence | Required outcome |
 | --- | --- | --- |
-| `token-expired-signin` / `alex-user` | Identity operational, account active with an expired token, KB-1001 has a local fix | Explain sign-out, sign-in, retry, then stop without a ticket |
-| `locked-signin` / `locked-user` | Identity operational, account locked, no local fix in the KB | Create exactly one medium access ticket, then stop |
+| `token-expired-signin` | Identity operational, account active with an expired token, KB-1001 has a local fix | Explain sign-out, sign-in, retry, then stop without a ticket |
+| `locked-signin` | Identity operational, account locked, no local fix in the KB | Create exactly one medium access ticket, then stop |
 
 `DEMO_CASE` is not a product feature. It is a convention in this sample's prompt:
 the model reads the case ID from the request and passes it as `case_id` to every
 tool, and the tools return a fixed fixture for that ID. That keeps runs
 deterministic instead of dependent on how the model paraphrases the request.
+No model-facing tool accepts a user name, account alias, email address, or
+free-text ticket summary. The host resolves account state from `case_id` and
+creates the mock ticket summary from verified evidence.
 
 ### Anatomy of a protected tool call
 
@@ -477,7 +480,7 @@ ACS owns the decision.
 
 | SAFE principle | Implementation | Regression test |
 | --- | --- | --- |
-| Scope | Rego limits the agent to two identity cases and medium access tickets; PII, other severities, and other categories are denied | `test_scope_boundary_blocks_high_or_non_access_tickets`, `test_email_in_summary_has_highest_priority` |
+| Scope | Rego limits the agent to two identity cases and medium access tickets; user identifiers are absent from the tool contract, while other severities and categories are denied | `test_scope_boundary_blocks_high_or_non_access_tickets`, `test_model_facing_tools_expose_no_user_identifier_or_free_text_summary` |
 | Anchored Decisions | The host validates raw tool output, signs the evidence envelope, stores it server-side, and gives the model only a reference | `test_signature_tampering_is_rejected`, `test_fabricated_escalation_evidence_is_blocked` |
 | Flow Integrity | Each step consumes evidence issued for the next tool; skipped, reordered, or cross-case prerequisites fail closed | `test_skipped_diagnostic_prerequisite_is_blocked`, `test_missing_cross_case_and_reordered_references_are_untrusted` |
 | Escalation | A known local remediation blocks ticket creation; verified no-remediation evidence requires one ticket before `output` can leave, and the host creates it through the same policy when the model omits it | `test_known_local_remediation_blocks_escalation`, `test_host_creates_exactly_one_valid_ticket_when_required`, `test_missing_ticket_cannot_leave_the_host_when_remediation_is_unavailable` |
@@ -559,7 +562,7 @@ Then, from a second terminal, invoke either case with `--local`:
 
 ```bash
 azd ai agent invoke --local --new-session \
-  "DEMO_CASE: token-expired-signin. Diagnose why alex-user cannot sign in and take only permitted action."
+  "DEMO_CASE: token-expired-signin. Diagnose the sign-in failure and take only permitted action."
 ```
 
 ### Run the tests

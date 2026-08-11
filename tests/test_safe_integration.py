@@ -28,7 +28,7 @@ async def invoke(middleware, tool_name, arguments, implementation):
     return context.result
 
 
-async def diagnostic_flow(case_id: str, account_alias: str):
+async def diagnostic_flow(case_id: str):
     middleware = AcsFunctionMiddleware()
     status = await invoke(
         middleware,
@@ -41,7 +41,6 @@ async def diagnostic_flow(case_id: str, account_alias: str):
         "get_user_account",
         {
             "case_id": case_id,
-            "account_alias": account_alias,
             "service_evidence_reference": status["evidence_reference"],
         },
         _get_user_account,
@@ -62,9 +61,7 @@ async def diagnostic_flow(case_id: str, account_alias: str):
 @pytest.mark.asyncio
 async def test_token_expired_case_preserves_flow_and_stops_on_local_remediation():
     reset_mock_tickets()
-    middleware, status, account, kb = await diagnostic_flow(
-        "token-expired-signin", "alex-user"
-    )
+    middleware, status, account, kb = await diagnostic_flow("token-expired-signin")
 
     assert verify_evidence(resolve_evidence_reference(status["evidence_reference"]))[
         "sequence"
@@ -87,9 +84,7 @@ async def test_token_expired_case_preserves_flow_and_stops_on_local_remediation(
         {
             "case_id": "token-expired-signin",
             "category": "access",
-            "summary": "Expired sign-in token",
             "severity": "medium",
-            "account_alias": "alex-user",
             "decision_evidence_reference": kb["evidence_reference"],
         },
         _create_escalation_ticket,
@@ -103,13 +98,11 @@ async def test_token_expired_case_preserves_flow_and_stops_on_local_remediation(
 @pytest.mark.asyncio
 async def test_locked_case_creates_exactly_one_anchored_handoff():
     reset_mock_tickets()
-    middleware, _, _, kb = await diagnostic_flow("locked-signin", "locked-user")
+    middleware, _, _, kb = await diagnostic_flow("locked-signin")
     arguments = {
         "case_id": "locked-signin",
         "category": "access",
-        "summary": "Locked account has no local remediation",
         "severity": "medium",
-        "account_alias": "locked-user",
         "decision_evidence_reference": kb["evidence_reference"],
     }
 
@@ -146,20 +139,18 @@ async def test_scope_and_flow_fail_before_tool_execution():
         },
         _search_kb,
     )
-    pii = await invoke(
+    out_of_scope = await invoke(
         middleware,
         "create_escalation_ticket",
         {
             "case_id": "locked-signin",
-            "category": "access",
-            "summary": "Contact customer@example.com",
+            "category": "hardware",
             "severity": "medium",
-            "account_alias": "locked-user",
             "decision_evidence_reference": "fabricated",
         },
         _create_escalation_ticket,
     )
 
     assert skipped["reason"] == "flow_integrity_violation"
-    assert pii["reason"] == "pii_in_ticket"
+    assert out_of_scope["reason"] == "scope_boundary"
     assert mock_tickets() == ()

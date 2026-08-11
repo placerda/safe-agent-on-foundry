@@ -5,18 +5,19 @@ principles of the SAFE framework.
 
 ## Fixtures
 
-- `DEMO_CASE: token-expired-signin` with `alex-user`: identity is operational,
+- `DEMO_CASE: token-expired-signin`: identity is operational,
   the account is active, its token is expired, and KB-1001 provides local
   remediation.
-- `DEMO_CASE: locked-signin` with `locked-user`: identity is operational, the
+- `DEMO_CASE: locked-signin`: identity is operational, the
   account is locked, and the mock KB has no local remediation.
 
 ## Scope
 
 The agent handles only the two fictional identity sign-in cases. It may run the
-three diagnostic tools and may create only medium `access` tickets. It must not
-copy email addresses into tickets, create hardware tickets, create high-severity
-tickets, or imply access to real users and systems.
+three diagnostic tools and may create only medium `access` tickets. Model-facing
+tools do not accept user identifiers or free-text ticket summaries. The agent
+must not create hardware tickets, create high-severity tickets, or imply access
+to real users and systems.
 
 ## Anchored Decisions
 
@@ -37,7 +38,8 @@ The required trajectory is:
 3. `search_kb` with the account evidence
 4. `create_escalation_ticket` only when the decision evidence permits it
 
-The same case ID and fictional account must remain consistent across the flow.
+The same case ID must remain consistent across the flow. Account state is
+resolved by the host and never selected by the model.
 When ACS blocks a skipped or reordered call, the agent should report the
 intervention and recover through the permitted sequence.
 

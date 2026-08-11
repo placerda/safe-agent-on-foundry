@@ -81,7 +81,6 @@ def decision_token() -> str:
         facts={
             "service": "identity",
             "service_state": "operational",
-            "account_alias": "locked-user",
             "account_found": True,
             "account_state": "locked",
             "sign_in_allowed": False,
@@ -107,7 +106,6 @@ async def test_verified_claims_are_forwarded_to_acs_snapshot():
         function=SimpleNamespace(name="create_escalation_ticket"),
         arguments={
             "case_id": "locked-signin",
-            "account_alias": "locked-user",
             "decision_evidence_reference": decision_token(),
         },
         result=None,
@@ -243,7 +241,6 @@ def escalation_context(reference):
         function=SimpleNamespace(name="create_escalation_ticket"),
         arguments={
             "case_id": "locked-signin",
-            "account_alias": "locked-user",
             "decision_evidence_reference": reference,
         },
         result=None,
@@ -311,7 +308,7 @@ async def test_span_never_carries_facts_arguments_or_the_signed_token(
     span = recorded_spans.get_finished_spans()[0]
     serialized = repr(dict(span.attributes))
     assert token not in serialized
-    assert "locked-user" not in serialized
+    assert "account_state" not in serialized
     assert "unit-test-secret" not in serialized
     assert not any(key.startswith("safe.evidence.facts") for key in span.attributes)
 
@@ -392,7 +389,7 @@ async def test_escaping_exception_never_records_its_message(recorded_spans):
 
     class ExplodingControl:
         async def run_tool(self, name, args, execute, **kwargs):
-            raise RuntimeError("locked-user token unit-test-secret leaked")
+            raise RuntimeError("sensitive-account token unit-test-secret leaked")
 
     context = escalation_context("fabricated")
 
@@ -406,7 +403,7 @@ async def test_escaping_exception_never_records_its_message(recorded_spans):
     assert span.events == ()
     assert span.status.status_code is StatusCode.ERROR
     assert span.status.description == "unhandled:RuntimeError"
-    assert "locked-user" not in repr(span.status.description)
+    assert "sensitive-account" not in repr(span.status.description)
     assert "unit-test-secret" not in repr(dict(span.attributes))
 
 
@@ -417,7 +414,7 @@ async def test_post_tool_block_records_no_exception_event(recorded_spans):
         verdict=Verdict(
             decision=Decision.DENY,
             reason="unsafe_result",
-            message="Do not expose account locked-user to the model.",
+            message="Do not expose account sensitive-account to the model.",
         ),
         transformed_policy_target=None,
         policy_input={},
@@ -439,7 +436,7 @@ async def test_post_tool_block_records_no_exception_event(recorded_spans):
     span = recorded_spans.get_finished_spans()[0]
     assert span.events == ()
     assert span.status.description == "unsafe_result"
-    assert "locked-user" not in repr(span.status.description)
+    assert "sensitive-account" not in repr(span.status.description)
 
 
 def test_evidence_reason_is_reduced_to_a_bounded_code():

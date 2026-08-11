@@ -1,3 +1,5 @@
+import inspect
+
 import pytest
 from agent_framework import SKIP_PARSING
 
@@ -29,7 +31,7 @@ def test_diagnostic_outputs_are_deterministic_non_pii_raw_facts():
     assert status == _get_system_status("token-expired-signin", "identity")
     assert "evidence_reference" not in status
 
-    account = _get_user_account("token-expired-signin", "alex-user", "host-verified")
+    account = _get_user_account("token-expired-signin", "host-verified")
     assert account["token_state"] == "expired"
     assert not ({"name", "email", "phone", "address"} & account.keys())
 
@@ -38,24 +40,29 @@ def test_diagnostic_outputs_are_deterministic_non_pii_raw_facts():
     assert kb["resolution"] == "local-remediation-available"
 
 
-def test_scope_rejects_unknown_cases_services_aliases_and_pii():
+def test_scope_rejects_unknown_cases_services_and_ticket_authority():
     with pytest.raises(ValueError, match="outside"):
         _get_system_status("unknown-case", "identity")
     with pytest.raises(ValueError, match="outside"):
         _get_system_status("token-expired-signin", "email")
     with pytest.raises(ValueError, match="outside"):
-        _get_user_account(
-            "token-expired-signin", "customer@example.com", "host-verified"
-        )
+        _get_user_account("unknown-case", "host-verified")
     with pytest.raises(ValueError, match="outside"):
         _create_escalation_ticket(
             "locked-signin",
-            "access",
-            "Contact customer@example.com",
+            "hardware",
             "medium",
-            "locked-user",
             "host-verified",
         )
+
+
+def test_model_facing_tools_expose_no_user_identifier_or_free_text_summary():
+    account_parameters = inspect.signature(_get_user_account).parameters
+    ticket_parameters = inspect.signature(_create_escalation_ticket).parameters
+
+    assert "account_alias" not in account_parameters
+    assert "account_alias" not in ticket_parameters
+    assert "summary" not in ticket_parameters
 
 
 def test_ticket_creation_is_idempotent_per_case():
@@ -63,17 +70,13 @@ def test_ticket_creation_is_idempotent_per_case():
     first = _create_escalation_ticket(
         "locked-signin",
         "access",
-        "Locked account has no local remediation",
         "medium",
-        "locked-user",
         "host-verified",
     )
     second = _create_escalation_ticket(
         "locked-signin",
         "access",
-        "Duplicate retry",
         "medium",
-        "locked-user",
         "host-verified",
     )
 
@@ -93,14 +96,12 @@ def test_tools_have_no_external_side_effects(monkeypatch):
 
     reset_mock_tickets()
     _get_system_status("locked-signin", "identity")
-    _get_user_account("locked-signin", "locked-user", "host-verified")
+    _get_user_account("locked-signin", "host-verified")
     _search_kb("locked-signin", "locked account", "host-verified")
     ticket = _create_escalation_ticket(
         "locked-signin",
         "access",
-        "Locked account has no local remediation",
         "medium",
-        "locked-user",
         "host-verified",
     )
     assert ticket["destination"] == "in-memory-only"

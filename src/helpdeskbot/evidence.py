@@ -12,7 +12,7 @@ import os
 from typing import Any
 import uuid
 
-from fixtures import ALLOWED_SERVICE, CASE_ACCOUNTS
+from fixtures import ALLOWED_SERVICE, SUPPORTED_CASES
 
 
 EVIDENCE_SECRET_ENV = "SAFE_EVIDENCE_SECRET"
@@ -89,7 +89,6 @@ REQUIRED_FACT_TYPES: dict[str, dict[str, type]] = {
     "account": {
         "service": str,
         "service_state": str,
-        "account_alias": str,
         "account_found": bool,
         "account_state": str,
         "sign_in_allowed": bool,
@@ -98,7 +97,6 @@ REQUIRED_FACT_TYPES: dict[str, dict[str, type]] = {
     "decision": {
         "service": str,
         "service_state": str,
-        "account_alias": str,
         "account_found": bool,
         "account_state": str,
         "sign_in_allowed": bool,
@@ -269,13 +267,10 @@ def _validate_claim_schema(payload: dict[str, Any]) -> None:
     for field, expected_type in required_types.items():
         if not isinstance(facts.get(field), expected_type):
             raise EvidenceError(f"Evidence fact {field} is missing or invalid.")
-    if payload.get("case_id") not in CASE_ACCOUNTS:
+    if payload.get("case_id") not in SUPPORTED_CASES:
         raise EvidenceError("Evidence case is outside HelpdeskBot scope.")
     if facts.get("service") != ALLOWED_SERVICE:
         raise EvidenceError("Evidence service is outside HelpdeskBot scope.")
-    expected_alias = CASE_ACCOUNTS[payload["case_id"]]
-    if stage in {"account", "decision"} and facts.get("account_alias") != expected_alias:
-        raise EvidenceError("Evidence account is outside HelpdeskBot scope.")
     if stage == "system_status" and payload.get("predecessor_id") is not None:
         raise EvidenceError("Initial evidence cannot have a predecessor.")
     if stage in {"account", "decision"} and not isinstance(
@@ -349,7 +344,7 @@ def evidence_snapshot_for_call(
 ) -> dict[str, Any]:
     """Project verified evidence into the host-owned ACS snapshot."""
     case_id = str(arguments.get("case_id", "")).strip().lower()
-    if case_id not in CASE_ACCOUNTS:
+    if case_id not in SUPPORTED_CASES:
         return _untrusted("case_outside_scope", case_id)
     if tool_name == "get_system_status":
         return {
@@ -431,7 +426,7 @@ def attach_result_evidence(
 
     raw = _require_raw_result(result, tool_name)
     case_id = str(arguments.get("case_id", "")).strip().lower()
-    if case_id not in CASE_ACCOUNTS:
+    if case_id not in SUPPORTED_CASES:
         raise EvidenceError("Tool result belongs to a case outside scope.")
 
     if tool_name == "get_system_status":
@@ -451,16 +446,12 @@ def attach_result_evidence(
             or prior_evidence.get("sequence") != ["get_system_status"]
         ):
             raise EvidenceError("Account result lacks valid service evidence.")
-        alias = str(raw.get("account_alias", "")).strip().lower()
-        if alias != CASE_ACCOUNTS[case_id]:
-            raise EvidenceError("Account result is outside the case scope.")
         stage = "account"
         audience = "search_kb"
         sequence = [*prior_evidence["sequence"], "get_user_account"]
         predecessor_id = prior_evidence["evidence_id"]
         facts = {
             **prior_evidence["facts"],
-            "account_alias": alias,
             "account_found": raw.get("found"),
             "account_state": str(raw.get("state", "unknown")),
             "sign_in_allowed": raw.get("sign_in_allowed"),
