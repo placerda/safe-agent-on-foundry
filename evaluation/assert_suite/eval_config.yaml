@@ -41,9 +41,15 @@ pipeline:
     concurrency: 1
     test_set_path: test_set.jsonl
     target:
+      # A callable wrapper, not the native azure_ai/agents/<id> target. That
+      # native path covers the v1 Assistants surface; HelpdeskBot is a custom
+      # Hosted Agent on the Responses (v2) protocol, which the official Foundry
+      # hosted-agent example also reaches through a callable.
       callable: evaluation.assert_suite.target:chat
+      # The target emits its own OpenInference spans, so the judge scores the
+      # trajectory instead of only the last message.
       trace:
-        backend: otel
+        backend: phoenix
         group_by: session.id
     tester: {}
     max_turns: 4

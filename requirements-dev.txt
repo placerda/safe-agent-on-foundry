@@ -1,4 +1,7 @@
 -r requirements.txt
+# The ASSERT callable target calls the deployed agent's Responses endpoint
+# directly, so the offline tests need httpx even without assert-ai installed.
+httpx==0.28.1
 opentelemetry-sdk==1.43.0
 pytest==8.4.2
 pytest-asyncio==1.1.0

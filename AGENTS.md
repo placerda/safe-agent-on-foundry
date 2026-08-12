@@ -13,5 +13,7 @@
   successful tool results.
 - Keep Foundry evaluation assets in `src/helpdeskbot/` because
   `azd ai agent eval` resolves configuration relative to the agent source.
-- Keep ASSERT assets in `evaluation/assert_suite/`.
+- Keep ASSERT assets in `evaluation/assert_suite/`. The callable target must
+  fail loudly on a missing endpoint, an HTTP error, or a response without
+  assistant text. A fallback string would score a broken deployment as a pass.
 - Run `python -m pytest` before proposing changes.

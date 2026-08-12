@@ -1,1 +1,16 @@
-assert-ai==0.1.0
+# ASSERT is beta, open source, and versioned faster than PyPI. The only PyPI
+# release is assert-ai 0.1.0, which predates both the official Foundry
+# hosted-agent example and the azure-aad extra this suite relies on, so the
+# suite pins a verified commit instead of a tag or a moving `main`.
+#
+# Commit 054797fe9e5b0b204de47e2f32ece6956e0fbf0d (2026-08-05) is after
+# responsibleai/ASSERT#250, which added examples/langgraph-foundry-hosted, and
+# includes the `azure-aad` extra for Entra ID auth on the judge and tester model.
+#
+# otel      : OTel trace capture, required by target.trace in eval_config.yaml
+# azure-aad : Entra ID auth for the ASSERT pipeline model, so no API key is needed
+assert-ai[otel,azure-aad] @ git+https://github.com/responsibleai/ASSERT.git@054797fe9e5b0b204de47e2f32ece6956e0fbf0d
+
+# Used directly by target.py to call the deployed agent's Responses endpoint.
+azure-identity==1.25.3
+httpx==0.28.1
