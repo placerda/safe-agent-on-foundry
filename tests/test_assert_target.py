@@ -5,6 +5,7 @@ Azure and never costs an inference.
 """
 
 import json
+import sys
 from types import SimpleNamespace
 
 import httpx
@@ -310,6 +311,19 @@ def test_parse_responses_payload_rejects_missing_call_ids(item) -> None:
         parse_responses_payload(_completed_payload([item, _message_item("Answer.")]))
 
 
+def test_parse_responses_payload_rejects_reused_call_id() -> None:
+    payload = _completed_payload(
+        [
+            *_call_items("duplicate", "search_kb", {}, {"hit": False}),
+            *_call_items("duplicate", "search_kb", {}, {"hit": True}),
+            _message_item("Answer."),
+        ]
+    )
+
+    with pytest.raises(FoundryTargetError, match="repeated function call ID"):
+        parse_responses_payload(payload)
+
+
 def test_chat_hosted_sends_authenticated_responses_request(hosted_mode) -> None:
     hosted_mode["response"] = _FakeResponse(
         _completed_payload([_message_item("Answer.")])
@@ -420,6 +434,60 @@ def test_chat_defaults_to_local_mode(monkeypatch) -> None:
         "message": "DEMO_CASE: locked-signin",
         "history": history,
     }
+
+
+def test_chat_in_process_replays_history_as_agent_framework_messages(monkeypatch) -> None:
+    captured = {}
+
+    class _Agent:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def run(self, messages):
+            captured["messages"] = messages
+            return SimpleNamespace(text="local answer")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "main",
+        SimpleNamespace(build_agent=lambda: _Agent()),
+    )
+    history = [
+        {"role": "user", "content": "first turn"},
+        {"role": "assistant", "content": "answer"},
+        {"role": "user", "content": "second turn"},
+    ]
+
+    result = target.asyncio.run(target._chat_in_process("second turn", history))
+
+    assert result == "local answer"
+    assert [(message.role, message.text) for message in captured["messages"]] == [
+        ("user", "first turn"),
+        ("assistant", "answer"),
+        ("user", "second turn"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "history",
+    [
+        [{"content": "missing role"}],
+        [{"role": "", "content": "empty role"}],
+        [{"role": "user"}],
+    ],
+)
+def test_chat_in_process_rejects_malformed_history(monkeypatch, history) -> None:
+    monkeypatch.setitem(
+        sys.modules,
+        "main",
+        SimpleNamespace(build_agent=lambda: pytest.fail("agent should not be built")),
+    )
+
+    with pytest.raises(FoundryTargetError, match="non-empty role and content"):
+        target.asyncio.run(target._chat_in_process("current turn", history))
 
 
 def test_chat_rejects_unknown_target_mode(monkeypatch) -> None:

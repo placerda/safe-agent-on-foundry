@@ -200,6 +200,7 @@ def parse_responses_payload(payload: Any) -> tuple[list[dict[str, Any]], str]:
     output_items = output if isinstance(output, list) else []
 
     calls: dict[str, dict[str, Any]] = {}
+    seen_call_ids: set[str] = set()
     trajectory: list[dict[str, Any]] = []
     for item in output_items:
         if not isinstance(item, Mapping):
@@ -211,10 +212,11 @@ def parse_responses_payload(payload: Any) -> tuple[list[dict[str, Any]], str]:
                 raise FoundryTargetError(
                     "Hosted response contained a function call with no valid call_id."
                 )
-            if call_id in calls:
+            if call_id in seen_call_ids:
                 raise FoundryTargetError(
                     f"Hosted response repeated function call ID {call_id!r}."
                 )
+            seen_call_ids.add(call_id)
             calls[call_id] = {
                 "name": item.get("name", "unknown"),
                 "arguments": _safe_value(_decode_json(item.get("arguments") or {})),
