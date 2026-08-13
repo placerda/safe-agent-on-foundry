@@ -146,7 +146,11 @@ Publisher** from step 2.
 ### 5. Run the two cases
 
 `azd ai agent invoke` handles endpoint, authentication, session, and formatting;
-`--new-session` keeps runs independent.
+`--new-session` keeps runs independent. The client requests streaming, but the
+ACS output middleware deliberately runs the agent turn without streaming,
+checks the complete response, and only then emits the approved result through
+the streaming protocol. Output therefore appears at once after the governed
+turn completes rather than token by token.
 
 A token-expired sign-in, where the knowledge base holds the fix:
 

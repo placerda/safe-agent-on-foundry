@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 import logging
 import os
 from pathlib import Path
@@ -21,10 +21,12 @@ from agent_framework import (
     AgentContext,
     AgentMiddleware,
     AgentResponse,
+    AgentResponseUpdate,
     FunctionInvocationContext,
     FunctionMiddleware,
     Message,
     MiddlewareTermination,
+    ResponseStream,
 )
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
@@ -188,6 +190,27 @@ def _host_escalation_response(
         finish_reason=getattr(original, "finish_reason", None),
         usage_details=getattr(original, "usage_details", None),
     )
+
+
+def _gated_response_stream(
+    response: AgentResponse,
+) -> ResponseStream[AgentResponseUpdate, AgentResponse]:
+    """Expose an already-gated response through the framework streaming contract."""
+
+    async def updates() -> AsyncIterator[AgentResponseUpdate]:
+        for message in response.messages:
+            yield AgentResponseUpdate(
+                contents=message.contents,
+                role=message.role,
+                author_name=message.author_name,
+                agent_id=response.agent_id,
+                response_id=response.response_id,
+                message_id=message.message_id,
+                created_at=response.created_at,
+                finish_reason=response.finish_reason,
+            )
+
+    return ResponseStream(updates(), finalizer=lambda _: response)
 
 
 def _configure_bundled_opa(
@@ -361,19 +384,10 @@ class AcsOutputMiddleware(AgentMiddleware):
         context: AgentContext,
         call_next: Callable[[], Awaitable[None]],
     ) -> None:
-        if context.stream:
-            # A ResponseStream can deliver tokens to the caller as soon as
-            # they are produced. By the time a full response exists to
-            # gate, some of it may already be irrevocably sent, and this
-            # sample has no buffering story that would let it un-send
-            # tokens. Rather than assemble output it cannot safely gate,
-            # it fails closed before running anything at all.
-            context.result = None
-            raise MiddlewareTermination(
-                "SAFE output gate: streaming responses are not supported "
-                "by this sample; failing closed."
-            )
-
+        requested_stream = context.stream
+        # azd requests streaming, but ACS must approve the assembled response
+        # before the caller receives any content.
+        context.stream = False
         invocation_id = new_invocation_id()
         token = bind_invocation(invocation_id)
         try:
@@ -386,7 +400,16 @@ class AcsOutputMiddleware(AgentMiddleware):
                 reset_invocation(token)
 
             await self._enforce_output(context, invocation_id)
+            if requested_stream:
+                if not isinstance(context.result, AgentResponse):
+                    context.result = None
+                    raise RuntimeError(
+                        "SAFE output gate expected an assembled AgentResponse "
+                        "before releasing a streaming result."
+                    )
+                context.result = _gated_response_stream(context.result)
         finally:
+            context.stream = requested_stream
             # Decision evidence is an invocation-scoped enforcement input,
             # not durable application state. Remove it on success and on
             # every failure path so the registry cannot grow indefinitely.

@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from acs_middleware import AcsFunctionMiddleware, AcsOutputMiddleware
-from agent_framework import AgentResponse, Message, MiddlewareTermination
+from agent_framework import AgentResponse, Message, MiddlewareTermination, ResponseStream
 import evidence
 from evidence import bind_invocation, decisions_for_invocation, new_invocation_id, reset_invocation
 from tools import (
@@ -353,19 +353,58 @@ async def test_enforce_output_invoked_twice_for_same_invocation_creates_no_extra
 
 
 @pytest.mark.asyncio
-async def test_streaming_fails_closed_without_running_anything():
-    """Streaming output cannot be gated after the fact, so it must fail closed."""
+async def test_streaming_is_released_only_after_output_enforcement():
+    """The azd streaming contract receives only the host-approved final response."""
+    reset_mock_tickets()
     middleware = AcsOutputMiddleware()
-    context = SimpleNamespace(
-        stream=True, result=SimpleNamespace(text="should never be produced")
+
+    async def produce_response():
+        await diagnostic_flow("locked-signin")
+        return AgentResponse(
+            messages=[Message("assistant", ["No local remediation was found."])],
+            response_id="stream-response-123",
+        )
+
+    context = await run_output(middleware, produce_response, stream=True)
+
+    assert context.stream is True
+    assert isinstance(context.result, ResponseStream)
+    updates = [update async for update in context.result]
+    emitted_text = "".join(update.text for update in updates)
+    assert emitted_text == (
+        "HelpdeskBot completed the required human handoff. "
+        "Support ticket MOCK-0001 was created for case locked-signin with "
+        "category access and medium severity."
     )
-    call_next = AsyncMock()
+    final_response = await context.result.get_final_response()
+    assert final_response.text == emitted_text
+    assert final_response.response_id == "stream-response-123"
+    assert len(mock_tickets()) == 1
 
-    with pytest.raises(MiddlewareTermination):
-        await middleware.process(context, call_next)
 
-    call_next.assert_not_called()
+@pytest.mark.asyncio
+async def test_streaming_output_failure_releases_no_updates(monkeypatch):
+    """A denied assembled response never becomes a stream visible to the caller."""
+    reset_mock_tickets()
+    middleware = AcsOutputMiddleware()
+    monkeypatch.setattr(
+        middleware, "_create_missing_tickets", AsyncMock(return_value=[])
+    )
+
+    async def produce_response():
+        await diagnostic_flow("locked-signin")
+        return AgentResponse(
+            messages=[Message("assistant", ["No local remediation was found."])]
+        )
+
+    context, call_count = await run_output_expect_blocked(
+        middleware, produce_response, stream=True
+    )
+
+    assert call_count == 1
+    assert context.stream is True
     assert context.result is None
+    assert mock_tickets() == ()
 
 
 @pytest.mark.asyncio
