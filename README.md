@@ -15,6 +15,12 @@ evidence before action, **Flow Integrity** protects the multi-step trajectory,
 and **Escalation** defines when it must stop or hand off. SAFE is a design
 framework, not a Foundry feature.
 
+**Original tutorial:** The verified ACS 0.3 implementation is preserved at
+[`acs-0.3-baseline`](https://github.com/placerda/safe-agent-on-foundry/tree/f9d2a55954d447554907686d59135489c393e826).
+See the [reproduction environment](docs/acs-0.3-baseline.md) and
+[article link corrections](docs/article-baseline-links.md). Published examples
+should use those immutable links rather than the moving `main` branch.
+
 ---
 
 ## Quickstart
