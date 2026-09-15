@@ -286,6 +286,18 @@ def _emit_trajectory(trajectory: list[dict[str, Any]], final_text: str) -> None:
 
 def _chat_hosted(message: str, history: list[dict[str, Any]] | None = None) -> str:
     endpoint = _agent_endpoint()
+    payload: dict[str, Any] = {
+        "input": build_responses_input(message, history),
+        "stream": False,
+    }
+    session_id = os.getenv("FOUNDRY_AGENT_SESSION_ID")
+    if session_id is not None:
+        if not session_id.strip():
+            raise FoundryTargetError(
+                "FOUNDRY_AGENT_SESSION_ID is empty. Supply a version-bound hosted "
+                "session ID, or remove the setting to use endpoint routing."
+            )
+        payload["agent_session_id"] = session_id.strip()
     response = httpx.post(
         endpoint,
         params={"api-version": RESPONSES_API_VERSION},
@@ -293,7 +305,7 @@ def _chat_hosted(message: str, history: list[dict[str, Any]] | None = None) -> s
             "Authorization": f"Bearer {_access_token()}",
             "Content-Type": "application/json",
         },
-        json={"input": build_responses_input(message, history), "stream": False},
+        json=payload,
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
     response.raise_for_status()

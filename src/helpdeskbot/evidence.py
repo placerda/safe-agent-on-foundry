@@ -18,43 +18,13 @@ from fixtures import ALLOWED_SERVICE, SUPPORTED_CASES
 EVIDENCE_SECRET_ENV = "SAFE_EVIDENCE_SECRET"
 TOKEN_VERSION = 1
 EVIDENCE_REFERENCE_PREFIX = "ev:"
-_EVIDENCE_REGISTRY: dict[str, str] = {}
+_EVIDENCE_REGISTRY: dict[tuple[str | None, str], str] = {}
 
-# Per-invocation correlation for the ACS `output` intervention point.
-#
-# One Hosted Agent process can be serving several concurrent `agent.run()`
-# invocations (different sessions, possibly the same case_id). The host must
-# never enforce the output gate using a single global "last case" value, so
-# completed decision-stage evidence is tracked per `(invocation_id, case_id)`
-# pair. `_INVOCATION_ID` is bound by `AcsOutputMiddleware` around the whole
-# tool-calling loop of one agent invocation; because that loop and every
-# nested `FunctionMiddleware` call run inside the same asyncio Task, the
-# contextvar propagates correctly across awaits without needing an agent
-# session identifier (which this sample does not reliably provide). Nothing
-# here is stored on the middleware instance itself -- `AcsOutputMiddleware`
-# and `AcsFunctionMiddleware` only ever hold a stateless `AgentControl`
-# handle -- so two concurrent invocations sharing one middleware object (and
-# one asyncio event loop) never observe each other's evidence.
-#
-# Why not thread this through `AgentContext`/`FunctionInvocationContext`
-# instead of a contextvar? The installed Agent Framework's own context
-# objects are not shared across the agent/tool-call boundary this needs to
-# cross: `AgentContext.metadata` / `.kwargs` / `.function_invocation_kwargs`
-# (read by `AcsOutputMiddleware`, an *agent*-level middleware) and
-# `FunctionInvocationContext.metadata` / `.kwargs` (read by
-# `AcsFunctionMiddleware`, a *tool-call*-level middleware) are distinct dict
-# instances -- the framework's function-calling loop constructs each
-# `FunctionInvocationContext` fresh, without copying anything from the
-# parent `AgentContext` (see `agent_framework._tools`, where
-# `FunctionInvocationContext(..., kwargs=runtime_kwargs.copy(), ...)` is
-# built with no `metadata=` argument at all). Writes a tool-call middleware
-# makes to its `FunctionInvocationContext` therefore cannot reach the
-# `AgentContext` an agent-level middleware sees later, at any installed
-# version of the framework this sample targets. A contextvar bound once per
-# `agent.run()` and read by both middleware layers is the only mechanism
-# that actually correlates them within one invocation while remaining
-# per-invocation (via `contextvars`' automatic per-`asyncio.Task` context
-# copy) rather than global.
+# SafeAgent binds a fresh authority scope around each complete native run.
+# Context propagation includes concurrent tool tasks. The model receives only
+# accepted references; pending tokens stay on the invocation's SafeEmitter.
+# Both registries are cleared on success, failure and cancellation, independent
+# of durable conversation history managed by ResponsesHostServer.
 _INVOCATION_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "safe_invocation_id", default=None
 )
@@ -147,6 +117,7 @@ def issue_evidence(
     facts: dict[str, Any],
     predecessor_id: str | None,
     secret: str | None = None,
+    call_id: str | None = None,
 ) -> str:
     """Create a compact host-signed evidence token."""
     unsigned = {
@@ -157,6 +128,8 @@ def issue_evidence(
         "sequence": sequence,
         "predecessor_id": predecessor_id,
         "facts": facts,
+        "invocation_id": current_invocation_id(),
+        "call_id": call_id,
     }
     unsigned["evidence_id"] = hashlib.sha256(_canonical_json(unsigned)).hexdigest()[:24]
     body = _encode(_canonical_json(unsigned))
@@ -170,16 +143,18 @@ def publish_evidence(token: str) -> str:
     """Store host-signed evidence in the registry and return the short evidence reference (ev:<id>) the model sees."""
     claims = verify_evidence(token)
     reference = f"{EVIDENCE_REFERENCE_PREFIX}{claims['evidence_id']}"
-    _EVIDENCE_REGISTRY[reference] = token
+    _EVIDENCE_REGISTRY[(current_invocation_id(), reference)] = token
     return reference
 
 
 def resolve_evidence_reference(value: str) -> str:
-    """Resolve a host-issued evidence reference while retaining direct-token test support."""
+    """Resolve accepted authority; direct tokens are permitted only in offline fixtures."""
     if not value.startswith(EVIDENCE_REFERENCE_PREFIX):
+        if current_invocation_id() is not None:
+            raise EvidenceError("Only accepted invocation evidence references are permitted.")
         return value
     try:
-        return _EVIDENCE_REGISTRY[value]
+        return _EVIDENCE_REGISTRY[(current_invocation_id(), value)]
     except KeyError as exc:
         raise EvidenceError("Evidence reference is unknown or expired.") from exc
 
@@ -251,6 +226,9 @@ def clear_invocation_decisions(invocation_id: str) -> None:
     ]
     for key in keys:
         del _DECISION_EVIDENCE_BY_INVOCATION[key]
+    for key in list(_EVIDENCE_REGISTRY):
+        if key[0] == invocation_id:
+            del _EVIDENCE_REGISTRY[key]
 
 
 def clear_decision_state() -> None:
@@ -314,6 +292,8 @@ def verify_evidence(
     ):
         raise EvidenceError("Evidence reference claims are invalid.")
     _validate_claim_schema(payload)
+    if current_invocation_id() is not None and payload.get("invocation_id") != current_invocation_id():
+        raise EvidenceError("Evidence belongs to another invocation.")
 
     normalized_case_id = (
         expected_case_id.strip().lower() if expected_case_id is not None else None
@@ -414,16 +394,15 @@ def _require_raw_result(result: Any, tool_name: str) -> dict[str, Any]:
     )
 
 
-def attach_result_evidence(
+def prepare_result_evidence(
     tool_name: str,
     arguments: dict[str, Any],
     result: Any,
     prior_evidence: dict[str, Any],
-) -> Any:
-    """Validate raw tool output and attach evidence signed only by the host."""
-    if tool_name == "create_escalation_ticket":
-        return result
-
+    *,
+    call_id: str | None = None,
+) -> tuple[dict[str, Any], str]:
+    """Sign pending evidence without publishing authority before post-tool approval."""
     raw = _require_raw_result(result, tool_name)
     case_id = str(arguments.get("case_id", "")).strip().lower()
     if case_id not in SUPPORTED_CASES:
@@ -482,37 +461,44 @@ def attach_result_evidence(
     else:
         raise EvidenceError(f"Unknown diagnostic tool: {tool_name}.")
 
-    evidence_reference = publish_evidence(
-        issue_evidence(
+    token = issue_evidence(
             case_id=case_id,
             stage=stage,
             audience=audience,
             sequence=sequence,
             predecessor_id=predecessor_id,
             facts=facts,
+            call_id=call_id,
         )
-    )
+    reference = EVIDENCE_REFERENCE_PREFIX + verify_evidence(token)["evidence_id"]
+    return {**raw, "evidence_reference": reference}, token
 
-    if stage == "decision":
-        # This is host-computed, trusted-by-construction data (never
-        # model-supplied) about to be signed into evidence the model will
-        # see only as an opaque reference. Recording it here -- rather than
-        # in the output middleware -- lets the ACS `output` gate reason
-        # about a case's diagnosis without re-deriving or re-verifying
-        # anything, and without ever trusting the model's own summary of
-        # what it found.
+
+def accept_result_evidence(token: str) -> str:
+    """Commit authority only after the native post-tool verdict permits the result."""
+    claims = verify_evidence(token)
+    evidence_reference = publish_evidence(token)
+    if claims["stage"] == "decision":
         record_decision_evidence(
-            case_id,
+            claims["case_id"],
             {
                 "evidence_reference": evidence_reference,
                 "evidence_id": evidence_reference.removeprefix(
                     EVIDENCE_REFERENCE_PREFIX
                 ),
-                "facts": dict(facts),
+                "facts": dict(claims["facts"]),
             },
         )
 
-    return {
-        **raw,
-        "evidence_reference": evidence_reference,
-    }
+    return evidence_reference
+
+
+def attach_result_evidence(tool_name, arguments, result, prior_evidence):
+    """Offline fixture helper; runtime uses separate preparation and acceptance."""
+    if current_invocation_id() is not None:
+        raise EvidenceError("Runtime evidence requires native post-tool acceptance.")
+    if tool_name == "create_escalation_ticket":
+        return result
+    value, token = prepare_result_evidence(tool_name, arguments, result, prior_evidence)
+    accept_result_evidence(token)
+    return value

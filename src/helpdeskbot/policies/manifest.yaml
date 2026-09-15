@@ -1,13 +1,31 @@
-agent_control_specification_version: "0.3.1-beta"
+agent_control_specification_version: "0.4.0-alpha.1"
 metadata:
   name: helpdeskbot
   description: SAFE enforcement for scope, evidence, flow, and escalation.
 policies:
+  lifecycle:
+    type: test
+    verdict: {decision: allow}
   helpdesk:
     type: rego
     bundle: .
     query: data.helpdeskbot.verdict
 intervention_points:
+  agent_startup:
+    policy_target: "$.target"
+    policy: {id: lifecycle}
+  input:
+    policy_target: "$.target"
+    policy: {id: lifecycle}
+  pre_model_call:
+    policy_target: "$.target"
+    policy: {id: lifecycle}
+  post_model_call:
+    policy_target: "$.target"
+    policy: {id: lifecycle}
+  agent_shutdown:
+    policy_target: "$.target"
+    policy: {id: lifecycle}
   pre_tool_call:
     policy_target: "$.tool_call.args"
     policy_target_kind: tool_args
@@ -15,7 +33,7 @@ intervention_points:
     policy:
       id: helpdesk
   post_tool_call:
-    policy_target: "$.tool_result"
+    policy_target: "$.target"
     policy_target_kind: tool_result
     tool_name_from: "$.tool_call.name"
     policy:

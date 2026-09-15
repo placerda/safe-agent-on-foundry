@@ -12,7 +12,7 @@ default output_verdict := {
 
 args := object.get(input.policy_target, "value", {})
 
-safe_snapshot := object.get(input.snapshot, "safe", {})
+safe_snapshot := object.get(object.get(input.snapshot, "extensions", {}), "safe.example/host", {})
 
 evidence := object.get(safe_snapshot, "evidence", {})
 

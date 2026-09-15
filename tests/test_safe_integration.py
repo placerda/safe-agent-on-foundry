@@ -1,156 +1,45 @@
-from types import SimpleNamespace
-
 import pytest
 
-from acs_middleware import AcsFunctionMiddleware
-from evidence import resolve_evidence_reference, verify_evidence
-from tools import (
-    _create_escalation_ticket,
-    _get_system_status,
-    _get_user_account,
-    _search_kb,
-    mock_tickets,
-    reset_mock_tickets,
-)
-
-
-async def invoke(middleware, tool_name, arguments, implementation):
-    context = SimpleNamespace(
-        function=SimpleNamespace(name=tool_name),
-        arguments=arguments,
-        result=None,
-    )
-
-    async def call_next():
-        context.result = implementation(**context.arguments)
-
-    await middleware.process(context, call_next)
-    return context.result
-
-
-async def diagnostic_flow(case_id: str):
-    middleware = AcsFunctionMiddleware()
-    status = await invoke(
-        middleware,
-        "get_system_status",
-        {"case_id": case_id, "service": "identity"},
-        _get_system_status,
-    )
-    account = await invoke(
-        middleware,
-        "get_user_account",
-        {
-            "case_id": case_id,
-            "service_evidence_reference": status["evidence_reference"],
-        },
-        _get_user_account,
-    )
-    kb = await invoke(
-        middleware,
-        "search_kb",
-        {
-            "case_id": case_id,
-            "query": "sign-in diagnosis",
-            "account_evidence_reference": account["evidence_reference"],
-        },
-        _search_kb,
-    )
-    return middleware, status, account, kb
+from host_boundary import SafeAgent
+from native_support import ScriptClient, chain_script, one_call, results
+from tools import mock_tickets
 
 
 @pytest.mark.asyncio
 async def test_token_expired_case_preserves_flow_and_stops_on_local_remediation():
-    reset_mock_tickets()
-    middleware, status, account, kb = await diagnostic_flow("token-expired-signin")
-
-    assert verify_evidence(resolve_evidence_reference(status["evidence_reference"]))[
-        "sequence"
-    ] == [
-        "get_system_status"
-    ]
-    assert verify_evidence(resolve_evidence_reference(account["evidence_reference"]))[
-        "sequence"
-    ] == [
-        "get_system_status",
-        "get_user_account",
-    ]
-    assert verify_evidence(resolve_evidence_reference(kb["evidence_reference"]))["facts"][
-        "local_remediation_available"
-    ] is True
-
-    blocked = await invoke(
-        middleware,
-        "create_escalation_ticket",
-        {
-            "case_id": "token-expired-signin",
-            "category": "access",
-            "severity": "medium",
-            "decision_evidence_reference": kb["evidence_reference"],
-        },
-        _create_escalation_ticket,
-    )
-
-    assert blocked["status"] == "blocked_by_acs"
-    assert blocked["reason"] == "local_remediation_available"
-    assert mock_tickets() == ()
+    client = ScriptClient(chain_script("token-expired-signin"))
+    await SafeAgent(client=client).run("help")
+    assert len(client.requests) == 4
+    assert len(results(client.requests[-1])) == 3
+    assert not mock_tickets()
 
 
 @pytest.mark.asyncio
 async def test_locked_case_creates_exactly_one_anchored_handoff():
-    reset_mock_tickets()
-    middleware, _, _, kb = await diagnostic_flow("locked-signin")
-    arguments = {
-        "case_id": "locked-signin",
-        "category": "access",
-        "severity": "medium",
-        "decision_evidence_reference": kb["evidence_reference"],
-    }
-
-    first = await invoke(
-        middleware,
-        "create_escalation_ticket",
-        arguments.copy(),
-        _create_escalation_ticket,
-    )
-    replay = await invoke(
-        middleware,
-        "create_escalation_ticket",
-        arguments.copy(),
-        _create_escalation_ticket,
-    )
-
-    assert first["ticket_id"] == "MOCK-0001"
-    assert replay == first
-    assert mock_tickets() == (first,)
+    client = ScriptClient(chain_script(model_ticket=True))
+    response = await SafeAgent(client=client).run("help")
+    assert "completed" in response.text
+    assert len(mock_tickets()) == 1
+    assert len(client.requests) == 5
 
 
 @pytest.mark.asyncio
-async def test_scope_and_flow_fail_before_tool_execution():
-    reset_mock_tickets()
-    middleware = AcsFunctionMiddleware()
+async def test_real_anchored_local_remediation_denies_model_ticket():
+    client = ScriptClient(chain_script("token-expired-signin", model_ticket=True))
+    await SafeAgent(client=client).run("help")
+    assert "local_remediation_available" in str(results(client.requests[-1])[-1])
+    assert not mock_tickets()
 
-    skipped = await invoke(
-        middleware,
-        "search_kb",
-        {
-            "case_id": "token-expired-signin",
-            "query": "skip account lookup",
-            "account_evidence_reference": "fabricated",
-        },
-        _search_kb,
-    )
-    out_of_scope = await invoke(
-        middleware,
-        "create_escalation_ticket",
-        {
-            "case_id": "locked-signin",
-            "category": "hardware",
-            "severity": "medium",
-            "decision_evidence_reference": "fabricated",
-        },
-        _create_escalation_ticket,
-    )
 
-    assert skipped["reason"] == "flow_integrity_violation"
-    assert out_of_scope["reason"] == "scope_boundary"
-    assert mock_tickets() == ()
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name,args,reason", [
+    ("get_system_status", {"case_id": "outside", "service": "identity"}, "scope_boundary"),
+    ("search_kb", {"case_id": "locked-signin", "query": "q", "account_evidence_reference": "fake"}, "flow_integrity_violation"),
+    ("create_escalation_ticket", {"case_id": "locked-signin", "category": "access", "severity": "medium",
+                                  "decision_evidence_reference": "fake"}, "unanchored_decision"),
+])
+async def test_scope_and_flow_fail_before_tool_execution(name, args, reason):
+    client = one_call(name, args)
+    await SafeAgent(client=client).run("help")
+    assert reason in str(results(client.requests[-1]))
+    assert not mock_tickets()

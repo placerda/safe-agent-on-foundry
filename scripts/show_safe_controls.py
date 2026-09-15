@@ -4,12 +4,8 @@ import asyncio
 import sys
 from pathlib import Path
 
-from agent_control_specification import (
-    AgentControl,
-    AgentControlBlocked,
-    EnforcementMode,
-    InterventionPoint,
-)
+from agent_control_spec import AcsInterceptor
+from agent_hooks import AgentContextBuilder, InterceptionBlocked, InterceptionEmitter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,7 +41,7 @@ def snapshot(
 
 
 async def check(
-    control: AgentControl,
+    control: InterceptionEmitter,
     principle: str,
     *,
     tool_name: str,
@@ -54,33 +50,27 @@ async def check(
 ) -> tuple[str, str, bool]:
     executed = False
 
-    async def execute(_arguments: dict) -> dict:
-        nonlocal executed
-        executed = True
-        return {"ticket_id": "MOCK-0001"}
-
+    builder = AgentContextBuilder(agent_id="safe-demo", framework="offline", session_id=principle)
+    builder.with_l2(extensions={"safe.example/host": evidence["safe"]})
     try:
-        await control.run_tool(
-            tool_name,
-            arguments,
-            execute,
-            snapshot=evidence,
-        )
-    except AgentControlBlocked as exc:
+        outcome = await control.emit(builder.pre_tool_call(call_id="demo", name=tool_name, args=arguments))
+        executed = True
+        await control.emit(builder.post_tool_call(
+            call_id="demo", name=tool_name, args=outcome.target, value={"ticket_id": "MOCK-0001"},
+        ))
+    except InterceptionBlocked as exc:
         return principle, exc.result.verdict.reason or "policy_denied", executed
     return principle, "allow", executed
 
 
 async def check_output(
-    control: AgentControl,
+    control: InterceptionEmitter,
     *,
     ticket_exists: bool,
 ) -> tuple[str, str]:
-    result = await control.evaluate_intervention_point(
-        InterventionPoint.OUTPUT,
-        {
-            "output": "Diagnostics are complete.",
-            "safe": {
+    builder = AgentContextBuilder(agent_id="safe-demo", framework="offline", session_id="output")
+    builder.with_l2(extensions={
+            "safe.example/host": {
                 "escalations": [
                     {
                         "case_id": "locked-signin",
@@ -89,25 +79,19 @@ async def check_output(
                     }
                 ]
             },
-        },
-    )
+        })
     try:
-        await control.enforce(
-            InterventionPoint.OUTPUT, result, EnforcementMode.ENFORCE
-        )
-    except AgentControlBlocked as exc:
+        result = await control.emit(builder.output(content="Diagnostics are complete."))
+    except InterceptionBlocked as exc:
         return (
             "Missing handoff",
             exc.result.verdict.reason or "policy_denied",
         )
-    return "Completed handoff", result.verdict.reason or "allow"
+    return "Completed handoff", result.record.verdict.reason or "allow"
 
 
 async def main() -> None:
-    from acs_middleware import _configure_bundled_opa
-
-    _configure_bundled_opa()
-    control = AgentControl.from_path(str(MANIFEST))
+    control = InterceptionEmitter().register(AcsInterceptor(str(MANIFEST)), "acs")
     ticket = {
         "case_id": "locked-signin",
         "category": "access",
@@ -179,7 +163,7 @@ async def main() -> None:
     ]
     expected_output = [
         ("Missing handoff", "missing_escalation_ticket"),
-        ("Completed handoff", "output_clear"),
+        ("Completed handoff", "allow"),
     ]
     if output_results != expected_output:
         raise AssertionError(
@@ -198,7 +182,7 @@ async def main() -> None:
     for check_name, verdict in output_results:
         result = (
             "allow"
-            if verdict == "output_clear"
+            if verdict == "allow"
             else f"deny: {verdict}"
         )
         print(f"{check_name:<20} {result}")

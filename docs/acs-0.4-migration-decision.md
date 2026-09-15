@@ -1,16 +1,72 @@
 # ACS 0.4 compatibility decision
 
-Status: **NO-GO for behavioral parity on the verified package combination**.
-The repository's runtime still uses the preserved ACS 0.3 integration.
-Do not deploy the candidate or describe it as behaviorally equivalent until
-the integration gates below pass.
+Status: **controlled integration redesign authorized on 2026-09-14**.
+The original drop-in migration was blocked by the verified API gaps below.
+The author subsequently approved redesigning the integration, not reducing the
+four SAFE guarantees. Deployment remains gated on the redesigned implementation
+passing its regression, failure, concurrency, and Responses checks.
+
+## Authorized redesign
+
+The approved changes to the original implementation approach are:
+
+- Use ACS 0.4's bundled Regorus engine, retaining the independent OPA baseline.
+- Perform one policy-guarded mandatory handoff pass before the native final
+  output gate. A terminal output deny is never caught and converted to success.
+- Place fatal runtime/post-tool classification at a host-owned execution
+  boundary, retaining original ACS records and reasons. Tool scheduling may be
+  serialized if required to prevent further protected callbacks after failure.
+- Give each invocation independent native hook and evidence state. The hosting
+  integration may change internally, but must demonstrate correct Responses
+  history, multi-turn behavior, and buffered output.
+
+These are explicit integration changes rather than claims that the original
+drop-in probes passed. Private framework patches, a second competing policy
+executor, model-authored evidence, and fail-open fallbacks remain prohibited.
+
+## Implemented boundary
+
+[`SafeAgent`](../src/helpdeskbot/host_boundary.py) is an ordinary framework
+`Agent` subclass, not a `SupportsAgentRun` proxy. It supplies a fresh
+`AgentContextBuilder`, `SafeEmitter`, and complete native middleware bundle
+through the public per-run `middleware` parameter. The complete bundle comes
+first, followed by application-only `HostHandoff`. Default
+`ResponsesHostServer` server-managed history remains in use.
+
+`SafeEmitter` specializes the public `InterceptionEmitter.emit` method, calls
+the inherited enforcing implementation, and registers one `AcsInterceptor`.
+The two framework-specific ACS middleware classes and their `run_tool` /
+direct output-evaluation paths are removed. No private framework methods or
+alternative policy executor are needed.
+
+Invocation authority exists before the startup event and remains bound through
+shutdown. Only the host populates the trusted
+`safe.example/host` snapshot extension. A lock serializes each complete
+pre-tool/callback/post-tool bracket, and fatal state is latched immediately.
+An expected pre-tool policy deny remains recoverable without executing the
+callback. Runtime failures and post-tool denies stop the invocation while
+retaining the original native ACS record.
+
+Diagnostic evidence is signed with both invocation and tool-call identity.
+It remains pending until native post-tool approval; only then can it authorize
+the next diagnostic step. Host remediation uses the same native pre/post-tool
+path as model-issued calls. Bounded handoff occurs before the sole native output
+gate, and no terminal output denial is converted to success. Streaming transport
+receives only the buffered approved result after the invocation completes.
+
+The first full migrated regression run passed 143 tests and all deterministic
+SAFE demonstration verdicts with real ACS/Regorus, including actual Responses
+HTTP/SSE and multi-turn handling. Final validation also checks that repaired
+handoff retains all diagnostic and ticket call/result pairs and uses a dependency
+resolution matching the normal hosted installer. These final gates and real
+hosted evaluation are distinct from the historical compatibility probes below.
 
 ## Policy engine
 
-Use Regorus for isolated ACS 0.4 candidate verification, rather than inventing
-an OPA adapter or maintaining a custom ACS wheel. This is the conditional
-policy-engine alternative in the implementation plan, not a change to the
-existing hosted service.
+Use Regorus for the authorized ACS 0.4 redesign, rather than inventing an OPA
+adapter or maintaining a custom ACS wheel. The original OPA implementation
+remains independently reproducible. Deployment of the redesign is separately
+authorized in the existing sandbox project; no infrastructure change is needed.
 
 The published `agent-control-spec==0.4.0a3` Python binding does not expose an
 OPA selector. At upstream commit
@@ -64,7 +120,7 @@ ACS is alpha, and
 [Python Agent Hooks is experimental](https://learn.microsoft.com/en-us/agent-framework/agents/agent-hooks?pivots=programming-language-python).
 Do not present these pins as stable production dependencies.
 
-## Blocking behavioral contracts
+## Historical drop-in blockers
 
 The unmodified combination is **not a drop-in SAFE replacement**:
 
@@ -79,8 +135,8 @@ The unmodified combination is **not a drop-in SAFE replacement**:
 - A host repair pass before the output check is not proof of the planned
   initial output verdict, bounded remediation, and output re-evaluation.
 
-Resolve these through supported public native-hook and host boundaries, or stop
-the migration. Do not weaken tests, mask errors as success, fabricate host-error
+The redesign must address these through public native-hook and host boundaries.
+Do not weaken tests, mask errors as success, fabricate host-error
 attribution, rely on swallowed record-sink exceptions for enforcement, or retain
 a competing legacy policy executor.
 
@@ -109,10 +165,11 @@ The relevant installed APIs are Agent Framework's
 No private API patch, second policy executor, approval resolver, or fabricated
 host-error verdict was introduced to bypass these limitations.
 
-Do not replace the existing middleware or update runtime pins on the strength of
-these partial results. Resolve the native API gaps or explicitly revisit the
-behavioral contract first. Full regression, Responses HTTP/SSE, final migrated
-article replacements, and hosted evaluation remain uncompleted gates.
+These partial results alone did not justify replacing the existing middleware.
+They motivated the controlled redesign authorized above. The implementation
+must close the same safety boundaries through its new design; full regression,
+Responses HTTP/SSE, final migrated article replacements, and hosted evaluation
+remain release gates.
 
 ## Hosted validation
 
@@ -123,5 +180,9 @@ independently named candidate in the same authorized project or obtain explicit
 approval for a routing change. Never treat creating a new version as proof of
 isolation.
 
-No infrastructure provisioning, active-service replacement, automatic promotion,
-or hosted validation is implied by this compatibility decision.
+The author separately authorized deletion of the old `helpdeskbot` deployment.
+Deletion was verified with a subsequent 404; the project, model, and resource
+group were preserved. The later redesign authorization includes recreating and
+validating the application in that same project, after local gates pass. This
+does not authorize provisioning infrastructure, changing RBAC, publishing the
+article, or merging into `main`.

@@ -1,0 +1,35 @@
+# Code-deploy packaging uses this service-root file, not the repo .gitignore.
+# Preserve standard azd exclusions when supplying a custom ignore file.
+agent.yaml
+agent.manifest.yaml
+azure.yaml
+connection.yaml
+connection.yml
+toolbox.yaml
+toolbox.yml
+.agentignore
+appPackage.zip
+.appPackage.zip.azd-generated
+TEAMS_APP_SETUP.md
+.env
+.env.*
+.azure/
+.git/
+__pycache__/
+.venv/
+venv/
+*.pyc
+*.pyo
+.mypy_cache/
+.pytest_cache/
+bin/
+obj/
+*.user
+*.suo
+.vs/
+node_modules/
+Dockerfile
+.dockerignore
+
+# Local Foundry evaluation caches/results must never enter the code package.
+.foundry/

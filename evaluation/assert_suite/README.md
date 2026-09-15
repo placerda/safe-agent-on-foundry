@@ -63,7 +63,20 @@ deterministic fictional fixtures, which is what makes a live run safe here.
 
 Local mode replays conversation history as Agent Framework messages but builds a
 fresh in-process agent for each callable invocation. Use it for development; use
-hosted mode for results you intend to quote.
+hosted mode for results you intend to quote. The migrated local runtime needs
+Linux/WSL, Python 3.13, and ACS's Regorus wheel; the HTTP-only hosted target does
+not require installing the native ACS runtime on the evaluation machine.
+
+`FOUNDRY_AGENT_SESSION_ID` optionally binds requests to an existing hosted
+session. Create that session for the exact candidate version; the current
+Foundry API pins a version through the session, not by inventing a version
+segment in the normal protocol endpoint. A configured but empty session ID is
+an error, not permission to fall back to the endpoint's latest version.
+When the variable is absent, the existing endpoint-routing behavior is preserved.
+
+A hosted session selects sandbox compute and version affinity. It is not
+conversation history. ASSERT still replays each case's explicit history in the
+request body; evidence remains scoped to the individual governed invocation.
 
 ## Run it
 
@@ -76,18 +89,26 @@ export AZURE_API_BASE="https://your-resource.openai.azure.com"
 export AZURE_API_VERSION="2025-04-01-preview"
 export ASSERT_AZURE_USE_AAD=1
 
-# Target: the deployed agent. Endpoint is printed by `azd deploy`.
+# Create a session bound to the deployed candidate version.
+azd ai agent sessions create helpdeskbot "$(azd env get-value AGENT_HELPDESKBOT_VERSION)"
+
+# Target: use the real protocol endpoint printed by `azd deploy`.
 export ASSERT_TARGET_MODE=hosted
-export FOUNDRY_AGENT_ENDPOINT="https://<resource>.services.ai.azure.com/api/projects/<project>/agents/helpdeskbot/versions/<n>"
+export FOUNDRY_AGENT_ENDPOINT="$(azd env get-value AGENT_HELPDESKBOT_RESPONSES_ENDPOINT)"
+export FOUNDRY_AGENT_SESSION_ID="<agent_session_id returned by sessions create>"
 
 # One live turn to prove endpoint, token, and parsing agree before a full run.
 python -m evaluation.assert_suite.smoke
 
-assert-ai run --config evaluation/assert_suite/eval_config.yaml
+assert-ai run --config evaluation/assert_suite/eval_config.yaml \
+  --override "artifacts_root=$(pwd)/evaluation/assert_suite/results" \
+  --force-stage inference --strict
 ```
 
-Pin the deployed version in the endpoint. Hosted Agent deployments are
-immutable, and an implicit latest silently mixes candidate and baseline results.
+Record the session's version with the results. Hosted Agent deployments are
+immutable, and unpinned routing silently mixes candidate and baseline results.
+Use a separate result directory or run ID for each candidate; explicitly rerun
+inference so cached trajectories cannot masquerade as a new deployment check.
 
 The offline tests in `tests/test_assert_target.py` and
 `tests/test_assert_smoke.py` mock the HTTP call and the token, so `python -m
@@ -96,7 +117,8 @@ pytest` exercises the target without an Azure call.
 ## Failure behavior
 
 The target raises instead of returning a plausible-looking string. An invalid
-target mode, a missing `FOUNDRY_AGENT_ENDPOINT`, a non-2xx response, any
+target mode, a missing `FOUNDRY_AGENT_ENDPOINT`, an explicitly empty session
+binding, a non-2xx response, any
 Responses status other than `completed`, a tool call or result without its
 matching pair, or a response with no assistant text all fail the run. A silent
 fallback would turn a broken deployment into a passing evaluation, which is the

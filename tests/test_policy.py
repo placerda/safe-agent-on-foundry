@@ -1,7 +1,8 @@
 from pathlib import Path
 
 import pytest
-from agent_control_specification import AgentControl, AgentControlBlocked
+from agent_hooks import InterceptionBlocked
+from policy_support import PolicyDriver
 
 
 MANIFEST = (
@@ -15,11 +16,7 @@ MANIFEST = (
 
 @pytest.fixture(scope="module")
 def control():
-    from acs_middleware import BUNDLED_OPA, _configure_bundled_opa
-
-    if BUNDLED_OPA.is_file():
-        _configure_bundled_opa()
-    return AgentControl.from_path(str(MANIFEST))
+    return PolicyDriver(MANIFEST)
 
 
 def safe_snapshot(
@@ -76,7 +73,7 @@ async def test_first_diagnostic_step_is_allowed(control):
 @pytest.mark.parametrize("tool_name", ["get_user_account", "search_kb"])
 async def test_skipped_diagnostic_prerequisite_is_blocked(control, tool_name):
     arguments = {"case_id": "token-expired-signin"}
-    with pytest.raises(AgentControlBlocked) as blocked:
+    with pytest.raises(InterceptionBlocked) as blocked:
         await control.run_tool(
             tool_name,
             arguments,
@@ -89,7 +86,7 @@ async def test_skipped_diagnostic_prerequisite_is_blocked(control, tool_name):
 
 @pytest.mark.asyncio
 async def test_fabricated_escalation_evidence_is_blocked(control):
-    with pytest.raises(AgentControlBlocked) as blocked:
+    with pytest.raises(InterceptionBlocked) as blocked:
         await control.run_tool(
             "create_escalation_ticket",
             {
@@ -108,7 +105,7 @@ async def test_fabricated_escalation_evidence_is_blocked(control):
 @pytest.mark.asyncio
 async def test_scope_boundary_blocks_high_or_non_access_tickets(control):
     for category, severity in (("access", "high"), ("hardware", "medium")):
-        with pytest.raises(AgentControlBlocked) as blocked:
+        with pytest.raises(InterceptionBlocked) as blocked:
             await control.run_tool(
                 "create_escalation_ticket",
                 {
@@ -126,7 +123,7 @@ async def test_scope_boundary_blocks_high_or_non_access_tickets(control):
 
 @pytest.mark.asyncio
 async def test_known_local_remediation_blocks_escalation(control):
-    with pytest.raises(AgentControlBlocked) as blocked:
+    with pytest.raises(InterceptionBlocked) as blocked:
         await control.run_tool(
             "create_escalation_ticket",
             {
@@ -147,7 +144,7 @@ async def test_known_local_remediation_blocks_escalation(control):
 
 @pytest.mark.asyncio
 async def test_evidence_subject_must_match_ticket(control):
-    with pytest.raises(AgentControlBlocked) as blocked:
+    with pytest.raises(InterceptionBlocked) as blocked:
         await control.run_tool(
             "create_escalation_ticket",
             {
@@ -165,7 +162,7 @@ async def test_evidence_subject_must_match_ticket(control):
 
 @pytest.mark.asyncio
 async def test_scope_boundary_has_priority_over_evidence_checks(control):
-    with pytest.raises(AgentControlBlocked) as blocked:
+    with pytest.raises(InterceptionBlocked) as blocked:
         await control.run_tool(
             "create_escalation_ticket",
             {

@@ -1,541 +1,226 @@
-"""Tests for the host-owned ACS ``output`` intervention point.
-
-``AcsFunctionMiddleware`` (see ``test_middleware.py`` / ``test_safe_integration.py``)
-governs individual tool calls. These tests cover the separate guarantee added by
-``AcsOutputMiddleware``: once diagnostics prove
-``local_remediation_available=false`` for a case, the Hosted Agent must not
-release *any* final response for that invocation unless exactly one
-escalation ticket exists for that case -- enforced by the host after the
-response is assembled, never by hoping the model remembers.
-"""
-
-from __future__ import annotations
-
+"""Host repair precedes the sole terminal native output approval."""
 import asyncio
-from types import SimpleNamespace
-from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
-
-from acs_middleware import AcsFunctionMiddleware, AcsOutputMiddleware
-from agent_framework import AgentResponse, Message, MiddlewareTermination, ResponseStream
+from agent_framework import Message, tool, SKIP_PARSING
+from agent_hooks import InterceptionBlocked
 import evidence
-from evidence import bind_invocation, decisions_for_invocation, new_invocation_id, reset_invocation
-from tools import (
-    _create_escalation_ticket,
-    _get_system_status,
-    _get_user_account,
-    _search_kb,
-    mock_tickets,
-    reset_mock_tickets,
-)
-
-
-async def invoke(middleware, tool_name, arguments, implementation):
-    """Drive one tool call through ``AcsFunctionMiddleware``.
-
-    Mirrors ``test_safe_integration.invoke`` exactly; duplicated locally so
-    this file has no import-order dependency on another test module.
-    """
-    context = SimpleNamespace(
-        function=SimpleNamespace(name=tool_name),
-        arguments=arguments,
-        result=None,
-    )
-
-    async def call_next():
-        context.result = implementation(**context.arguments)
-
-    await middleware.process(context, call_next)
-    return context.result
-
-
-async def diagnostic_flow(case_id: str):
-    """Run the standard get_system_status -> get_user_account -> search_kb flow."""
-    middleware = AcsFunctionMiddleware()
-    status = await invoke(
-        middleware,
-        "get_system_status",
-        {"case_id": case_id, "service": "identity"},
-        _get_system_status,
-    )
-    account = await invoke(
-        middleware,
-        "get_user_account",
-        {
-            "case_id": case_id,
-            "service_evidence_reference": status["evidence_reference"],
-        },
-        _get_user_account,
-    )
-    kb = await invoke(
-        middleware,
-        "search_kb",
-        {
-            "case_id": case_id,
-            "query": "sign-in diagnosis",
-            "account_evidence_reference": account["evidence_reference"],
-        },
-        _search_kb,
-    )
-    return middleware, status, account, kb
-
-
-async def run_output(middleware, produce_response, *, stream: bool = False):
-    """Drive ``AcsOutputMiddleware.process`` with a fake ``AgentContext``."""
-    context = SimpleNamespace(stream=stream, result=None)
-
-    async def call_next():
-        context.result = await produce_response()
-
-    await middleware.process(context, call_next)
-    return context
-
-
-async def run_output_expect_blocked(middleware, produce_response, *, stream: bool = False):
-    """Like :func:`run_output`, but assert the gate blocks the response."""
-    context = SimpleNamespace(stream=stream, result=None)
-    call_count = 0
-
-    async def call_next():
-        nonlocal call_count
-        call_count += 1
-        context.result = await produce_response()
-
-    with pytest.raises(MiddlewareTermination):
-        await middleware.process(context, call_next)
-    return context, call_count
+import host_boundary
+from host_boundary import HostFailure, SafeAgent
+from native_support import ScriptClient, chain_script, fault_manifest, one_call, call
+from tools import mock_tickets
 
 
 @pytest.mark.asyncio
-async def test_output_allowed_without_ticket_when_local_remediation_exists():
-    """Local remediation exists -> allow, and no ticket is ever attempted."""
-    reset_mock_tickets()
-    middleware = AcsOutputMiddleware()
-
-    async def produce_response():
-        _, _, _, kb = await diagnostic_flow("token-expired-signin")
-        assert kb["evidence_reference"]  # sanity: the diagnostic flow itself ran
-        return SimpleNamespace(text="Your sign-in token will refresh automatically.")
-
-    context = await run_output(middleware, produce_response)
-
-    assert context.result is not None
-    assert context.result.text == "Your sign-in token will refresh automatically."
-    assert mock_tickets() == ()
+@pytest.mark.parametrize("stream", [False, True])
+async def test_output_allowed_without_ticket_when_local_remediation_exists(stream):
+    agent = SafeAgent(client=ScriptClient(chain_script("token-expired-signin")))
+    response = await agent.run("help", stream=True).get_final_response() if stream else await agent.run("help")
+    assert response.text == "MODEL_DID_NOT_HANDOFF"
+    assert not mock_tickets()
 
 
 @pytest.mark.asyncio
-async def test_missing_ticket_cannot_leave_the_host_when_remediation_is_unavailable(
-    monkeypatch,
-):
-    """If host-side remediation cannot resolve a case, the response stays blocked.
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("model_ticket", [False, True])
+async def test_host_creates_exactly_one_valid_ticket_when_required(stream, model_ticket, monkeypatch):
+    points = []
+    original = host_boundary.SafeEmitter.emit
 
-    Isolates the "never leak" guarantee from the "auto-create" behaviour
-    (covered separately below) by forcing remediation to find nothing to do,
-    the way it legitimately would for a case with no usable evidence.
-    """
-    reset_mock_tickets()
-    middleware = AcsOutputMiddleware()
-    monkeypatch.setattr(
-        middleware, "_create_missing_tickets", AsyncMock(return_value=[])
-    )
-
-    async def produce_response():
-        await diagnostic_flow("locked-signin")
-        return SimpleNamespace(text="No local remediation was found.")
-
-    context, call_count = await run_output_expect_blocked(middleware, produce_response)
-
-    assert call_count == 1  # the agent's own turn is never re-run to "fix" this
-    assert context.result is None
-    assert mock_tickets() == ()
-
-
-@pytest.mark.asyncio
-async def test_host_creates_exactly_one_valid_ticket_when_required():
-    """No ticket from the model -> the host creates exactly one, then allows."""
-    reset_mock_tickets()
-    middleware = AcsOutputMiddleware()
-
-    async def produce_response():
-        await diagnostic_flow("locked-signin")
-        return AgentResponse(
-            messages=[
-                Message("assistant", []),
-                Message("assistant", ["No local remediation was found."]),
-            ],
-            response_id="response-123",
-        )
-
-    context = await run_output(middleware, produce_response)
-
-    assert context.result is not None
-    tickets = mock_tickets()
-    assert len(tickets) == 1
-    ticket = tickets[0]
-    assert ticket["case_id"] == "locked-signin"
-    assert ticket["category"] == "access"
-    assert ticket["severity"] == "medium"
-    assert ticket["ticket_id"] == "MOCK-0001"
-    assert context.result.text == (
-        "HelpdeskBot completed the required human handoff. "
-        "Support ticket MOCK-0001 was created for case locked-signin with "
-        "category access and medium severity."
-    )
-    assert "No local remediation was found." not in context.result.text
-    assert context.result.response_id == "response-123"
-    assert len(context.result.messages) == 2
+    async def observe(self, ctx):
+        outcome = await original(self, ctx)
+        points.append((ctx["interception_point"], ctx.get("tool_call", {}).get("name")))
+        return outcome
+    monkeypatch.setattr(host_boundary.SafeEmitter, "emit", observe)
+    agent = SafeAgent(client=ScriptClient(chain_script(model_ticket=model_ticket)))
+    response = await agent.run("help", stream=True).get_final_response() if stream else await agent.run("help")
+    assert len(mock_tickets()) == 1
+    assert mock_tickets()[0]["category"] == "access"
+    assert mock_tickets()[0]["severity"] == "medium"
+    assert points.count(("pre_tool_call", "create_escalation_ticket")) == 1
+    assert points.count(("post_tool_call", "create_escalation_ticket")) == 1
+    assert points.count(("output", None)) == 1
+    assert points.count(("agent_startup", None)) == 1
+    assert points.count(("input", None)) == 1
+    assert points.count(("agent_shutdown", None)) == 1
+    assert {point for point, _ in points} == {
+        "agent_startup", "input", "pre_model_call", "post_model_call",
+        "pre_tool_call", "post_tool_call", "output", "agent_shutdown",
+    }
+    assert points.index(("post_tool_call", "create_escalation_ticket")) < points.index(("output", None))
+    assert "MODEL_DID_NOT_HANDOFF" not in response.text
+    assert not evidence._EVIDENCE_REGISTRY
+    assert not evidence._DECISION_EVIDENCE_BY_INVOCATION
 
 
 @pytest.mark.asyncio
-async def test_completed_invocation_discards_decision_state(monkeypatch):
-    """Decision evidence is removed after output enforcement completes."""
-    reset_mock_tickets()
-    invocation_id = "fixed-test-invocation"
-    monkeypatch.setattr(
-        "acs_middleware.new_invocation_id", lambda: invocation_id
-    )
-    middleware = AcsOutputMiddleware()
-
-    async def produce_response():
-        await diagnostic_flow("locked-signin")
-        return SimpleNamespace(text="No local remediation was found.")
-
-    await run_output(middleware, produce_response)
-
-    assert decisions_for_invocation(invocation_id) == {}
+@pytest.mark.parametrize("query", [False, True])
+@pytest.mark.parametrize("stream", [False, True])
+async def test_streaming_output_failure_releases_no_updates_and_discards_state(tmp_path, query, stream):
+    agent = SafeAgent(client=ScriptClient(chain_script()), manifest=fault_manifest(tmp_path, "output", query=query))
+    updates = []
+    with pytest.raises((InterceptionBlocked, HostFailure)):
+        if stream:
+            async for update in agent.run("help", stream=True):
+                updates.append(update)
+        else:
+            await agent.run("help")
+    assert not updates
+    assert not evidence._EVIDENCE_REGISTRY
+    assert not evidence._DECISION_EVIDENCE_BY_INVOCATION
 
 
 @pytest.mark.asyncio
-async def test_failed_invocation_discards_decision_state(monkeypatch):
-    """Decision evidence is also removed when the agent turn raises."""
-    invocation_id = "failed-test-invocation"
-    monkeypatch.setattr(
-        "acs_middleware.new_invocation_id", lambda: invocation_id
-    )
-    middleware = AcsOutputMiddleware()
-
-    async def produce_response():
-        await diagnostic_flow("locked-signin")
-        raise RuntimeError("simulated model failure")
-
-    with pytest.raises(RuntimeError, match="simulated model failure"):
-        await run_output(middleware, produce_response)
-
-    assert decisions_for_invocation(invocation_id) == {}
-
-
-def test_decisions_for_invocation_never_leak_across_invocations():
-    """Wrong-invocation isolation at the evidence layer, independent of ACS."""
-    evidence.clear_decision_state()
-    invocation_a = new_invocation_id()
-    token_a = bind_invocation(invocation_a)
-    try:
-        evidence.record_decision_evidence(
-            "locked-signin",
-            {
-                "evidence_reference": "sig:placeholder-a",
-                "facts": {"local_remediation_available": False},
-            },
-        )
-    finally:
-        reset_invocation(token_a)
-
-    invocation_b = new_invocation_id()
-    token_b = bind_invocation(invocation_b)
-    try:
-        assert decisions_for_invocation(invocation_b) == {}
-    finally:
-        reset_invocation(token_b)
-
-    assert "locked-signin" in decisions_for_invocation(invocation_a)
-    evidence.clear_decision_state()
+async def test_missing_ticket_cannot_leave_host_when_handoff_fails(monkeypatch):
+    def fail(**kwargs):
+        raise ValueError("SECRET")
+    monkeypatch.setattr(host_boundary, "_create_escalation_ticket", fail)
+    with pytest.raises(HostFailure, match="tool_execution_failed"):
+        await SafeAgent(client=ScriptClient(chain_script())).run("help")
+    assert not mock_tickets()
+    assert not evidence._EVIDENCE_REGISTRY
+    assert not evidence._DECISION_EVIDENCE_BY_INVOCATION
 
 
 @pytest.mark.asyncio
-async def test_stale_or_mismatched_decision_facts_cannot_trigger_a_ticket():
-    """A corrupted/stale host record cannot manufacture a ticket for the wrong subject.
-
-    Ticket creation re-verifies against the cryptographically signed evidence
-    itself (via ``evidence_snapshot_for_call`` / the Rego ``evidence_subject_mismatch``
-    rule), not against whatever this in-memory bookkeeping claims. If the
-    escalation-tracking record disagrees with what the evidence actually
-    proves, remediation must refuse rather than paper over the mismatch.
-    """
-    reset_mock_tickets()
-    middleware = AcsOutputMiddleware()
-
-    async def produce_response():
-        _, _, _, kb = await diagnostic_flow("locked-signin")
-        # Replace this invocation's record with a different case while keeping
-        # evidence that cryptographically proves locked-signin.
-        evidence.clear_decision_state()
-        evidence.record_decision_evidence(
-            "token-expired-signin",
-            {
-                "evidence_reference": kb["evidence_reference"],
-                "facts": {
-                    "local_remediation_available": False,
-                },
-            },
-        )
-        return SimpleNamespace(text="No local remediation was found.")
-
-    context, _ = await run_output_expect_blocked(middleware, produce_response)
-
-    assert context.result is None
-    assert mock_tickets() == ()
+async def test_stale_host_decision_cannot_authorize_a_handoff(monkeypatch):
+    monkeypatch.setattr(host_boundary, "decisions_for_invocation", lambda _: {
+        "locked-signin": {"facts": {"local_remediation_available": False},
+                          "evidence_reference": "ev:stale-from-another-invocation"},
+    })
+    calls = []
+    monkeypatch.setattr(host_boundary, "_create_escalation_ticket", lambda **_: calls.append(True))
+    agent = SafeAgent(client=ScriptClient(lambda *_: Message("assistant", ["candidate"])))
+    with pytest.raises(InterceptionBlocked) as error:
+        await agent.run("help")
+    assert error.value.result.verdict.reason == "unanchored_decision"
+    assert not calls
 
 
 @pytest.mark.asyncio
-async def test_acs_evaluation_failure_fails_closed(monkeypatch):
-    """An ACS/OPA outage must block output, never silently allow it."""
-    reset_mock_tickets()
-    middleware = AcsOutputMiddleware()
-
-    async def boom(*_args: Any, **_kwargs: Any) -> Any:
-        raise RuntimeError("simulated ACS outage")
-
-    monkeypatch.setattr(middleware._control, "evaluate_intervention_point", boom)
-
-    async def produce_response():
-        await diagnostic_flow("token-expired-signin")
-        return SimpleNamespace(text="Your sign-in token will refresh automatically.")
-
-    context, _ = await run_output_expect_blocked(middleware, produce_response)
-
-    assert context.result is None
-    assert mock_tickets() == ()
-
-
-@pytest.mark.asyncio
-async def test_repeated_output_evaluation_is_idempotent():
-    """Re-evaluating the same case never creates a second ticket."""
-    reset_mock_tickets()
-    middleware = AcsOutputMiddleware()
-
-    async def produce_response():
-        await diagnostic_flow("locked-signin")
-        return SimpleNamespace(text="No local remediation was found.")
-
-    first = await run_output(middleware, produce_response)
-    second = await run_output(middleware, produce_response)
-
-    assert first.result is not None
-    assert second.result is not None
-    tickets = mock_tickets()
-    assert len(tickets) == 1
-    assert tickets[0]["case_id"] == "locked-signin"
+async def test_handoff_pre_deny_never_calls_callback_or_retries(tmp_path, monkeypatch):
+    import yaml
+    from host_boundary import POLICY_MANIFEST
+    doc = yaml.safe_load(POLICY_MANIFEST.read_text())
+    doc["policies"]["helpdesk"]["bundle"] = str(POLICY_MANIFEST.parent)
+    # A real policy denies only ticket calls, leaving the diagnostic chain intact.
+    (tmp_path / "fault.rego").write_text(
+        'package fault\nimport rego.v1\ndefault verdict := {"decision":"allow"}\n'
+        'verdict := {"decision":"deny","reason":"ticket_denied"} if { input.tool.name == "create_escalation_ticket" }\n')
+    doc["policies"]["fault"] = {"type": "rego", "bundle": str(tmp_path), "query": "data.fault.verdict"}
+    doc["intervention_points"]["pre_tool_call"]["policy"] = {"id": "fault"}
+    path = tmp_path / "manifest.yaml"
+    path.write_text(yaml.safe_dump(doc))
+    calls = []
+    monkeypatch.setattr(host_boundary, "_create_escalation_ticket", lambda **_: calls.append(True))
+    with pytest.raises(InterceptionBlocked) as error:
+        await SafeAgent(client=ScriptClient(chain_script()), manifest=path).run("help")
+    assert error.value.result.verdict.reason == "ticket_denied"
+    assert not calls
 
 
 @pytest.mark.asyncio
-async def test_enforce_output_invoked_twice_for_same_invocation_creates_no_extra_ticket():
-    """Idempotent even at the lower level of a single invocation being re-checked."""
-    reset_mock_tickets()
-    middleware = AcsOutputMiddleware()
-    invocation_id = new_invocation_id()
-    token = bind_invocation(invocation_id)
-    try:
-        await diagnostic_flow("locked-signin")
-    finally:
-        reset_invocation(token)
+@pytest.mark.parametrize("same_case", [False, True])
+async def test_concurrent_invocations_do_not_cross_contaminate_and_tickets_are_idempotent(same_case):
+    ready = asyncio.Barrier(2)
+    original = host_boundary.SafeEmitter.emit
 
-    context = SimpleNamespace(
-        stream=False, result=SimpleNamespace(text="No local remediation was found.")
-    )
-    await middleware._enforce_output(context, invocation_id)
-    await middleware._enforce_output(context, invocation_id)
+    # A public emitter entrypoint observer is a test synchronization seam only.
+    async def synchronize(self, ctx):
+        if ctx["interception_point"] == "agent_startup":
+            await ready.wait()
+        return await original(self, ctx)
 
-    tickets = mock_tickets()
-    assert len(tickets) == 1
+    from unittest.mock import patch
+    agents = [
+        SafeAgent(client=ScriptClient(chain_script("locked-signin"))),
+        SafeAgent(client=ScriptClient(chain_script("locked-signin" if same_case else "token-expired-signin"))),
+    ]
+    with patch.object(host_boundary.SafeEmitter, "emit", synchronize):
+        responses = await asyncio.gather(*(agent.run("help") for agent in agents))
+    assert "human handoff" in responses[0].text
+    if not same_case:
+        assert responses[1].text == "MODEL_DID_NOT_HANDOFF"
+    assert len(mock_tickets()) == 1
+    assert not evidence._EVIDENCE_REGISTRY
 
 
 @pytest.mark.asyncio
-async def test_streaming_is_released_only_after_output_enforcement():
-    """The azd streaming contract receives only the host-approved final response."""
-    reset_mock_tickets()
-    middleware = AcsOutputMiddleware()
-
-    async def produce_response():
-        await diagnostic_flow("locked-signin")
-        return AgentResponse(
-            messages=[Message("assistant", ["No local remediation was found."])],
-            response_id="stream-response-123",
-        )
-
-    context = await run_output(middleware, produce_response, stream=True)
-
-    assert context.stream is True
-    assert isinstance(context.result, ResponseStream)
-    updates = [update async for update in context.result]
-    emitted_text = "".join(update.text for update in updates)
-    assert emitted_text == (
-        "HelpdeskBot completed the required human handoff. "
-        "Support ticket MOCK-0001 was created for case locked-signin with "
-        "category access and medium severity."
-    )
-    final_response = await context.result.get_final_response()
-    assert final_response.text == emitted_text
-    assert final_response.response_id == "stream-response-123"
+async def test_repeated_invocations_same_case_create_no_extra_ticket():
+    for _ in range(2):
+        await SafeAgent(client=ScriptClient(chain_script())).run("help")
     assert len(mock_tickets()) == 1
 
 
 @pytest.mark.asyncio
-async def test_streaming_output_failure_releases_no_updates(monkeypatch):
-    """A denied assembled response never becomes a stream visible to the caller."""
-    reset_mock_tickets()
-    middleware = AcsOutputMiddleware()
-    monkeypatch.setattr(
-        middleware, "_create_missing_tickets", AsyncMock(return_value=[])
-    )
+async def test_one_shared_raw_agent_has_distinct_concurrent_authority_scopes(monkeypatch):
+    ready = asyncio.Barrier(2)
+    scopes = []
+    original = host_boundary.SafeEmitter.emit
 
-    async def produce_response():
-        await diagnostic_flow("locked-signin")
-        return AgentResponse(
-            messages=[Message("assistant", ["No local remediation was found."])]
-        )
-
-    context, call_count = await run_output_expect_blocked(
-        middleware, produce_response, stream=True
-    )
-
-    assert call_count == 1
-    assert context.stream is True
-    assert context.result is None
-    assert mock_tickets() == ()
-
-
-@pytest.mark.asyncio
-async def test_model_initiated_ticket_creation_still_works_alongside_output_gate():
-    """Existing pre/post tool-call ticket creation is unaffected by the output gate.
-
-    When the model itself does the right thing and calls
-    ``create_escalation_ticket`` during its own turn (exactly as in
-    ``test_safe_integration.test_locked_case_creates_exactly_one_anchored_handoff``),
-    the output gate must not re-create or duplicate anything -- it should see
-    the ticket already exists and simply allow.
-    """
-    reset_mock_tickets()
-    function_middleware = AcsFunctionMiddleware()
-    output_middleware = AcsOutputMiddleware()
-
-    async def produce_response():
-        status = await invoke(
-            function_middleware,
-            "get_system_status",
-            {"case_id": "locked-signin", "service": "identity"},
-            _get_system_status,
-        )
-        account = await invoke(
-            function_middleware,
-            "get_user_account",
-            {
-                "case_id": "locked-signin",
-                "service_evidence_reference": status["evidence_reference"],
-            },
-            _get_user_account,
-        )
-        kb = await invoke(
-            function_middleware,
-            "search_kb",
-            {
-                "case_id": "locked-signin",
-                "query": "locked account",
-                "account_evidence_reference": account["evidence_reference"],
-            },
-            _search_kb,
-        )
-        ticket = await invoke(
-            function_middleware,
-            "create_escalation_ticket",
-            {
-                "case_id": "locked-signin",
-                "category": "access",
-                "severity": "medium",
-                "decision_evidence_reference": kb["evidence_reference"],
-            },
-            _create_escalation_ticket,
-        )
-        assert ticket["ticket_id"] == "MOCK-0001"
-        return SimpleNamespace(text="Escalated to the account team.")
-
-    context = await run_output(output_middleware, produce_response)
-
-    assert context.result is not None
-    tickets = mock_tickets()
-    assert len(tickets) == 1
-    assert tickets[0]["ticket_id"] == "MOCK-0001"
+    async def observe(self, ctx):
+        if ctx["interception_point"] == "agent_startup":
+            scopes.append(self.invocation_id)
+            await ready.wait()
+        return await original(self, ctx)
+    monkeypatch.setattr(host_boundary.SafeEmitter, "emit", observe)
+    def script(messages, count):
+        case = next(message.text for message in reversed(messages) if message.role == "user")
+        return chain_script(case)(messages, count)
+    agent = SafeAgent(client=ScriptClient(script))
+    responses = await asyncio.gather(agent.run("locked-signin"), agent.run("token-expired-signin"))
+    assert len(set(scopes)) == 2
+    assert "human handoff" in responses[0].text
+    assert responses[1].text == "MODEL_DID_NOT_HANDOFF"
+    assert len(mock_tickets()) == 1
+    assert not evidence._EVIDENCE_REGISTRY
 
 
 @pytest.mark.asyncio
-async def test_concurrent_invocations_for_different_cases_do_not_cross_contaminate():
-    """Two sessions in flight at once must never see each other's decision state.
-
-    ``test_decisions_for_invocation_never_leak_across_invocations`` proves
-    isolation sequentially (one invocation fully finishes, then the next
-    starts). This test proves the stronger, real-world property: with two
-    ``AcsOutputMiddleware.process()`` calls genuinely interleaved on the
-    *same* middleware instance via ``asyncio.gather`` (mirroring two
-    concurrent hosted-agent sessions sharing one process), the per-invocation
-    contextvar binding -- not any attribute on the middleware instance, and
-    not a single "last case" global -- keeps each invocation's evidence
-    scoped to itself. A case with local remediation must stay ticket-free
-    even while another concurrent invocation is creating a ticket for a
-    different, unresolved case.
-    """
-    reset_mock_tickets()
-    middleware = AcsOutputMiddleware()
-
-    async def resolved_case():
-        _, _, _, kb = await diagnostic_flow("token-expired-signin")
-        assert kb["evidence_reference"]
-        return SimpleNamespace(text="Your sign-in token will refresh automatically.")
-
-    async def unresolved_case():
-        await diagnostic_flow("locked-signin")
-        return SimpleNamespace(text="No local remediation was found.")
-
-    resolved_context, unresolved_context = await asyncio.gather(
-        run_output(middleware, resolved_case),
-        run_output(middleware, unresolved_case),
-    )
-
-    assert resolved_context.result is not None
-    assert unresolved_context.result is not None
-    tickets = mock_tickets()
-    assert len(tickets) == 1
-    assert tickets[0]["case_id"] == "locked-signin"
+async def test_local_session_also_persists_only_the_repaired_answer():
+    observed = []
+    def script(messages, count):
+        if any(message.role == "user" and message.text == "followup" for message in messages):
+            observed.extend(messages)
+            return Message("assistant", ["approved"])
+        return chain_script()(messages, count)
+    agent = SafeAgent(client=ScriptClient(script))
+    session = agent.create_session()
+    await agent.run("help", session=session)
+    await agent.run("followup", session=session)
+    text = " ".join(message.text for message in observed)
+    assert "MODEL_DID_NOT_HANDOFF" not in text
+    assert "human handoff" in text
 
 
 @pytest.mark.asyncio
-async def test_concurrent_invocations_for_same_case_create_only_one_ticket():
-    """Two concurrent sessions escalating the same case must not double-create.
+@pytest.mark.parametrize("stream", [False, True])
+async def test_cancellation_cleans_state_and_never_releases_output(stream):
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+    callbacks = []
+    @tool(result_parser=SKIP_PARSING)
+    async def get_system_status(case_id: str, service: str):
+        callbacks.append(True)
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
 
-    Simulates two users (or two retries) hitting the exact same unresolved
-    case at the same moment. Even though each invocation independently
-    observes "no ticket yet" before either one finishes creating it, the
-    result must still be exactly one ticket: the host-side pre-check in
-    ``_create_missing_tickets`` plus the tool's own idempotency guard
-    (``tools._create_escalation_ticket`` returns the existing ticket for a
-    known ``case_id`` instead of appending a second one) together make
-    concurrent escalation of the same case safe.
-    """
-    reset_mock_tickets()
-    middleware = AcsOutputMiddleware()
-
-    async def unresolved_case():
-        await diagnostic_flow("locked-signin")
-        return SimpleNamespace(text="No local remediation was found.")
-
-    first_context, second_context = await asyncio.gather(
-        run_output(middleware, unresolved_case),
-        run_output(middleware, unresolved_case),
-    )
-
-    assert first_context.result is not None
-    assert second_context.result is not None
-    tickets = mock_tickets()
-    assert len(tickets) == 1
-    assert tickets[0]["case_id"] == "locked-signin"
+    client = ScriptClient(lambda *_: Message("assistant", [
+        call("get_system_status", {"case_id": "locked-signin", "service": "identity"}, "first"),
+        call("get_system_status", {"case_id": "locked-signin", "service": "identity"}, "second"),
+    ]))
+    agent = SafeAgent(client=client,
+                      tools=[get_system_status])
+    invocation = agent.run("help", stream=True).get_final_response() if stream else agent.run("help")
+    task = asyncio.create_task(invocation)
+    await asyncio.wait_for(started.wait(), 3)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.wait_for(cancelled.wait(), 3)
+    assert callbacks == [True]
+    assert not evidence._EVIDENCE_REGISTRY
+    assert not evidence._DECISION_EVIDENCE_BY_INVOCATION

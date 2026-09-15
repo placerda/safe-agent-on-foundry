@@ -17,3 +17,8 @@
   fail loudly on a missing endpoint, an HTTP error, or a response without
   assistant text. A fallback string would score a broken deployment as a pass.
 - Run `python -m pytest` before proposing changes.
+
+## Foundry development
+
+This project was built with the microsoft-foundry skill. Before working on or
+answering questions about Foundry agents, read the microsoft-foundry skill first.
