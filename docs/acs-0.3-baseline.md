@@ -60,7 +60,8 @@ python scripts/prepare_opa.py
 chmod +x src/helpdeskbot/opa
 export PATH="$PWD/src/helpdeskbot:$PATH"
 python -m pip check
-python -m pytest --basetemp .pytest-tmp
+BASELINE_TEST_ROOT="$(mktemp -d)"
+python -m pytest --basetemp "$BASELINE_TEST_ROOT/pytest"
 python scripts/show_safe_controls.py
 ```
 
@@ -74,8 +75,10 @@ An advisory check of the snapshot reported
 [CVE-2025-71176](https://github.com/advisories/GHSA-6w46-j5rx-g56g) in the historical
 `pytest==8.4.2` development dependency, fixed in 9.0.3. The preserved snapshot does
 not silently upgrade it. Use an isolated environment and the explicit private
-`--basetemp` directory above, not a shared system temporary directory. Candidate
-development dependencies must be audited separately.
+`--basetemp` parent above, not a predictable directory in a shared temporary root.
+Keep the test directory outside the checkout: configuration-discovery fixtures
+must not inherit the repository's `azure.yaml` through their parent directories.
+Candidate development dependencies must be audited separately.
 
 ## Observed baseline behavior
 
