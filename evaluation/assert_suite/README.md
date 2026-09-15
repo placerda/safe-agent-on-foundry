@@ -20,6 +20,8 @@ This suite judges HelpdeskBot against the four SAFE principles.
 | `target.py` | Callable target: local in-process or deployed Hosted Agent |
 | `smoke.py` | Opt-in one-shot live check of the hosted target |
 | `requirements.txt` | Pinned ASSERT revision plus the target's own dependencies |
+| `rejudge.py` | Judge-only audit adapter retaining raw ASSERT and provider answers |
+| `calibration_inputs.py` | Explicitly synthetic held-out controls, with separate expectations |
 
 ## Why a callable target
 
@@ -125,15 +127,62 @@ outcomes and all four violation dimensions; it does not change the agent,
 dataset, dimension rubrics, or failure threshold. Review generated taxonomies
 before using them for new suites.
 
-The sandbox calibration still produced a false positive and missed two
-synthetic negative controls with the configured judge model. The curated
-taxonomy is not a claim of reliable judgment; see the
-[recorded results](../../docs/acs-0.4-validation.md). Do not use this LLM score
-alone as the automatic merge gate.
+The initial sandbox calibration produced a false positive and missed two
+synthetic negative controls. The requested acceptance criterion is a functioning
+**ASSERT LLM judge**, not a substitute deterministic pass. See the complete
+[recorded results](../../docs/acs-0.4-validation.md), including failed attempts.
+The corrected configuration scored the original 12-row calibration **12/12
+twice** and the eight-row held-out calibration **8/8 twice**, using the LLM's
+own unchanged raw verdicts. This is evidence for these fixtures, not a universal
+reliability claim.
 
-### Deterministic trajectory gate
+### Judge-only replay and audit
 
-`trajectory.py` is the automatic **observed-trajectory** gate for these fixed
+The judge explicitly uses `reasoning_effort: high`; model settings under
+`pipeline.systematize` do not apply to it. The taxonomy's evidence-precedence
+and reference-continuity instructions are embedded in the actual judge prompt.
+Top-level `context` and `behavior.md` are not a judge-system-prompt override.
+Tool indices, arguments, and results take precedence over an assistant's
+retrospective claims. All original SAFE expectations remain unchanged.
+The 32,768-token completion ceiling includes hidden reasoning. The old 12,000
+ceiling exhausted the budget before producing any JSON in an instrumented
+probe; this setting does not change deployed model capacity.
+
+```bash
+python -m evaluation.assert_suite.rejudge captured-inference-set.jsonl fresh-run-directory
+python -m evaluation.assert_suite.calibration_inputs captured-inference-set.jsonl fresh-heldout-directory
+python -m evaluation.assert_suite.rejudge fresh-heldout-directory/inference_set.jsonl fresh-heldout-run
+```
+
+Use the existing evaluator credentials above, not a hosted-agent endpoint.
+The adapter calls the pinned ASSERT `build_judge_contract` and
+`run_transcript_judge` exports with the CLI's native transcript XML and schema.
+It does not patch ASSERT or replace its LLM verdict. Sequential calls are
+separated by 60 seconds by default. `judge.n` remains one: repeated runs are
+independent artifacts, not majority voting or best-of selection.
+
+Every fresh directory retains the input, resolved prompt, model settings,
+schema, raw answers, normalized verdicts, and an allowlisted LiteLLM provider
+response audit (content, finish reason, token usage; no credentials or hidden
+reasoning text). Run directories cannot be reused. Errors propagate or cause a
+nonzero exit after retaining failed judgments. Zero exit indicates completion,
+**not calibration success**. Check expected outcomes against LLM dimensions;
+never infer success from ASSERT's zero-valued failed-score envelope.
+
+The held-out generator changes aliases and wording consistently, includes
+four safe synthetic trajectories and four new failure variants (hardware
+category, unobserved KB reference, ticket before KB, missing locked handoff).
+These are not live captures. Expectations are stored separately and are never
+sent to the judge. Rejudge both original controls and held-out cases repeatedly
+without changing configuration between repeats.
+
+Optional integration tests run in the pinned ASSERT environment:
+`python -m pytest tests/test_assert_judge.py`. The main native-runtime test
+environment may skip these if ASSERT is not installed.
+
+### Optional deterministic trajectory diagnostic
+
+`trajectory.py` is an optional **observed-trajectory** diagnostic for these fixed
 fixtures. It checks Scope (case/service/ticket shape), Anchored Decisions
 (fixture facts and reference continuity), Flow Integrity (complete ordered
 pairs), and Escalation (exactly one required handoff, no unnecessary ticket).
@@ -155,9 +204,10 @@ synthetic expectations fail loudly. Any unexpected real-trajectory finding
 returns a nonzero exit status. The proof is a separate file: it never rewrites
 ASSERT verdicts or converts the LLM's known calibration failures into passes.
 
-The 2026-09-15 replay matched all eight original traces and detected all four
+The earlier 2026-09-15 deterministic replay matched all eight original traces and detected all four
 synthetic controls, including forged aliases and reordered tools missed by the
-LLM. This is a replay, not eight new hosted invocations.
+LLM. This is a replay, not eight new hosted invocations, and it does not satisfy
+the ASSERT LLM acceptance criterion.
 
 Exit code zero means the pipeline completed, not that every score passed.
 Inspect every row's `judge_status` and `verdict.dimensions`. Preserve failed
