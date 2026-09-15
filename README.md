@@ -28,6 +28,12 @@ propagation, mandatory handoff, and buffered output. ACS 0.4 is alpha and the
 Python Agent Hooks integration is experimental. See the
 [integration decision](docs/acs-0.4-migration-decision.md).
 
+**Migration deliverables:** The [article update guide](docs/article-update-guide.md)
+contains complete replacement prose, snippets, and commit-pinned links.
+The [validation report](docs/acs-0.4-validation.md) records the deployed sandbox
+checks and the remaining evaluation/telemetry release gates. Deployment success
+does not imply that those gates passed.
+
 ---
 
 ## Quickstart
