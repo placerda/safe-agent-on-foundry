@@ -4,7 +4,7 @@ This guide updates [the published SAFE article](https://techcommunity.microsoft.
 It accounts for all **33 distinct repository links, 34 occurrences, and 28 code
 blocks** in the inspected article. The complete middleware file occurs twice.
 
-**Migrated source:** [`7d0795dbe3aea94286a9e33f9978d7c40bec606a`](https://github.com/placerda/safe-agent-on-foundry/tree/7d0795dbe3aea94286a9e33f9978d7c40bec606a).
+**Migrated source:** [`0415a052b1ac86afe5608d4cc925a1ac13693c17`](https://github.com/placerda/safe-agent-on-foundry/tree/0415a052b1ac86afe5608d4cc925a1ac13693c17).
 **Original source:** [`f9d2a55954d447554907686d59135489c393e826`](https://github.com/placerda/safe-agent-on-foundry/tree/f9d2a55954d447554907686d59135489c393e826) (`acs-0.3-baseline`).
 Every migrated source link below resolves to the source commit, not to this
 guide's later documentation commit. Code excerpts are drawn from that commit;
@@ -13,10 +13,10 @@ they are contextual excerpts, not independent runnable programs.
 ## 1. Preserve the original tutorial first
 
 If the existing article is kept as an ACS 0.3 tutorial, apply every replacement in
-[`article-baseline-links.md`](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/docs/article-baseline-links.md), including
+[`article-baseline-links.md`](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/docs/article-baseline-links.md), including
 the six corrected middleware ranges, and paste its version notice and versioned
 checkout instructions. Reproduce it with the separately preserved
-[`baseline environment`](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/docs/acs-0.3-baseline.md).
+[`baseline environment`](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/docs/acs-0.3-baseline.md).
 Do not mix those source links or dependency pins with the native-hooks rewrite.
 
 Creating a tag alone does not repair published `main` URLs. **The author must
@@ -35,46 +35,46 @@ not to a similarly numbered but unrelated line.
 
 | Published link suffix | Migrated replacement | Editorial change |
 | --- | --- | --- |
-| `(repository root)` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/tree/7d0795dbe3aea94286a9e33f9978d7c40bec606a) | Update the commit pin. |
-| `/blob/main/README.md` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/README.md) | Update the commit pin. |
-| `/blob/main/azure.yaml` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/azure.yaml) | Update the commit pin. |
-| `/blob/main/evaluation/assert_suite/behavior.md` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/evaluation/assert_suite/behavior.md) | Update the commit pin. |
-| `/blob/main/evaluation/assert_suite/behavior.md#L36-L39` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/evaluation/assert_suite/behavior.md#L36-L39) | Update the commit pin. |
-| `/blob/main/scripts/prepare_opa.py` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/requirements.txt) | Remove OPA setup prose; link the embedded-Regorus dependencies instead. |
-| `/blob/main/scripts/show_safe_controls.py` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/scripts/show_safe_controls.py) | Update the commit pin. |
-| `/blob/main/src/helpdeskbot/acs_middleware.py` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py) | Replace both occurrences; old middleware was removed. |
-| `/blob/main/src/helpdeskbot/acs_middleware.py#L236-L238` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L100-L107) | Replace the caption/snippet with the new responsibility below. |
-| `/blob/main/src/helpdeskbot/acs_middleware.py#L240-L255` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L111-L118) | Replace the caption/snippet with the new responsibility below. |
-| `/blob/main/src/helpdeskbot/acs_middleware.py#L274-L283` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L131-L140) | Replace the caption/snippet with the new responsibility below. |
-| `/blob/main/src/helpdeskbot/acs_middleware.py#L440-L446` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L280-L285) | Replace the caption/snippet with the new responsibility below. |
-| `/blob/main/src/helpdeskbot/acs_middleware.py#L502-L507` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L215-L248) | Replace the caption/snippet with the new responsibility below. |
-| `/blob/main/src/helpdeskbot/acs_middleware.py#L535-L540` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L174-L196) | Replace the caption/snippet with the new responsibility below. |
-| `/blob/main/src/helpdeskbot/evidence.py#L152-L161` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/evidence.py#L123-L134) | Replace the caption/snippet with the new responsibility below. |
-| `/blob/main/src/helpdeskbot/evidence.py#L169-L174` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/evidence.py#L477-L493) | Replace the caption/snippet with the new responsibility below. |
-| `/blob/main/src/helpdeskbot/evidence.py#L373-L378` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/evidence.py#L353-L358) | Replace the caption/snippet with the new responsibility below. |
-| `/blob/main/src/helpdeskbot/evidence.py#L63-L82` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/evidence.py#L33-L52) | Replace the caption/snippet with the new responsibility below. |
-| `/blob/main/src/helpdeskbot/main.py` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/main.py) | Update the commit pin. |
-| `/blob/main/src/helpdeskbot/main.py#L18-L30` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/main.py#L16-L30) | Replace the caption/snippet with the new responsibility below. |
-| `/blob/main/src/helpdeskbot/policies/helpdesk.rego` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/policies/helpdesk.rego) | Update the commit pin. |
-| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L108-L115` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/policies/helpdesk.rego#L108-L115) | Update the commit pin. |
-| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L124-L135` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/policies/helpdesk.rego#L124-L135) | Update the commit pin. |
-| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L13-L21` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/policies/helpdesk.rego#L13-L21) | Update the commit pin. |
-| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L146-L166` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/policies/helpdesk.rego#L146-L166) | Update the commit pin. |
-| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L23-L44` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/policies/helpdesk.rego#L23-L44) | Update the commit pin. |
-| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L63-L72` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/policies/helpdesk.rego#L63-L72) | Update the commit pin. |
-| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L80-L86` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/policies/helpdesk.rego#L80-L86) | Update the commit pin. |
-| `/blob/main/src/helpdeskbot/policies/manifest.yaml` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/policies/manifest.yaml) | Update the commit pin. |
-| `/blob/main/src/helpdeskbot/tools.py#L43-L45` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/tools.py#L43-L45) | Update the commit pin. |
-| `/blob/main/src/helpdeskbot/tools.py#L82-L87` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/tools.py#L82-L87) | Update the commit pin. |
-| `/tree/main` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/tree/7d0795dbe3aea94286a9e33f9978d7c40bec606a) | Update the commit pin. |
-| `/tree/main/evaluation/assert_suite` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/tree/7d0795dbe3aea94286a9e33f9978d7c40bec606a/evaluation/assert_suite) | Update the commit pin. |
+| `(repository root)` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/tree/0415a052b1ac86afe5608d4cc925a1ac13693c17) | Update the commit pin. |
+| `/blob/main/README.md` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/README.md) | Update the commit pin. |
+| `/blob/main/azure.yaml` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/azure.yaml) | Update the commit pin. |
+| `/blob/main/evaluation/assert_suite/behavior.md` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/evaluation/assert_suite/behavior.md) | Update the commit pin. |
+| `/blob/main/evaluation/assert_suite/behavior.md#L36-L39` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/evaluation/assert_suite/behavior.md#L36-L39) | Update the commit pin. |
+| `/blob/main/scripts/prepare_opa.py` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/requirements.txt) | Remove OPA setup prose; link the embedded-Regorus dependencies instead. |
+| `/blob/main/scripts/show_safe_controls.py` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/scripts/show_safe_controls.py) | Update the commit pin. |
+| `/blob/main/src/helpdeskbot/acs_middleware.py` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py) | Replace both occurrences; old middleware was removed. |
+| `/blob/main/src/helpdeskbot/acs_middleware.py#L236-L238` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L100-L107) | Replace the caption/snippet with the new responsibility below. |
+| `/blob/main/src/helpdeskbot/acs_middleware.py#L240-L255` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L111-L118) | Replace the caption/snippet with the new responsibility below. |
+| `/blob/main/src/helpdeskbot/acs_middleware.py#L274-L283` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L131-L140) | Replace the caption/snippet with the new responsibility below. |
+| `/blob/main/src/helpdeskbot/acs_middleware.py#L440-L446` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L280-L285) | Replace the caption/snippet with the new responsibility below. |
+| `/blob/main/src/helpdeskbot/acs_middleware.py#L502-L507` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L215-L248) | Replace the caption/snippet with the new responsibility below. |
+| `/blob/main/src/helpdeskbot/acs_middleware.py#L535-L540` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L174-L196) | Replace the caption/snippet with the new responsibility below. |
+| `/blob/main/src/helpdeskbot/evidence.py#L152-L161` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/evidence.py#L123-L134) | Replace the caption/snippet with the new responsibility below. |
+| `/blob/main/src/helpdeskbot/evidence.py#L169-L174` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/evidence.py#L477-L493) | Replace the caption/snippet with the new responsibility below. |
+| `/blob/main/src/helpdeskbot/evidence.py#L373-L378` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/evidence.py#L353-L358) | Replace the caption/snippet with the new responsibility below. |
+| `/blob/main/src/helpdeskbot/evidence.py#L63-L82` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/evidence.py#L33-L52) | Replace the caption/snippet with the new responsibility below. |
+| `/blob/main/src/helpdeskbot/main.py` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/main.py) | Update the commit pin. |
+| `/blob/main/src/helpdeskbot/main.py#L18-L30` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/main.py#L16-L30) | Replace the caption/snippet with the new responsibility below. |
+| `/blob/main/src/helpdeskbot/policies/helpdesk.rego` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/policies/helpdesk.rego) | Update the commit pin. |
+| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L108-L115` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/policies/helpdesk.rego#L108-L115) | Update the commit pin. |
+| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L124-L135` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/policies/helpdesk.rego#L124-L135) | Update the commit pin. |
+| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L13-L21` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/policies/helpdesk.rego#L13-L21) | Update the commit pin. |
+| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L146-L166` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/policies/helpdesk.rego#L146-L166) | Update the commit pin. |
+| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L23-L44` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/policies/helpdesk.rego#L23-L44) | Update the commit pin. |
+| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L63-L72` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/policies/helpdesk.rego#L63-L72) | Update the commit pin. |
+| `/blob/main/src/helpdeskbot/policies/helpdesk.rego#L80-L86` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/policies/helpdesk.rego#L80-L86) | Update the commit pin. |
+| `/blob/main/src/helpdeskbot/policies/manifest.yaml` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/policies/manifest.yaml) | Update the commit pin. |
+| `/blob/main/src/helpdeskbot/tools.py#L43-L45` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/tools.py#L43-L45) | Update the commit pin. |
+| `/blob/main/src/helpdeskbot/tools.py#L82-L87` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/tools.py#L82-L87) | Update the commit pin. |
+| `/tree/main` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/tree/0415a052b1ac86afe5608d4cc925a1ac13693c17) | Update the commit pin. |
+| `/tree/main/evaluation/assert_suite` | [Pinned source](https://github.com/placerda/safe-agent-on-foundry/tree/0415a052b1ac86afe5608d4cc925a1ac13693c17/evaluation/assert_suite) | Update the commit pin. |
 
 ## 3. Ready-to-paste architecture and enforcement text
 
 ### Version note
 
 > This revision uses ACS 0.4 with native Agent Hooks and embedded Regorus. Its
-> immutable implementation is [7d0795dbe3aea94286a9e33f9978d7c40bec606a](https://github.com/placerda/safe-agent-on-foundry/tree/7d0795dbe3aea94286a9e33f9978d7c40bec606a). The original ACS 0.3/OPA
+> immutable implementation is [0415a052b1ac86afe5608d4cc925a1ac13693c17](https://github.com/placerda/safe-agent-on-foundry/tree/0415a052b1ac86afe5608d4cc925a1ac13693c17). The original ACS 0.3/OPA
 > tutorial is preserved at [f9d2a55954d447554907686d59135489c393e826](https://github.com/placerda/safe-agent-on-foundry/tree/f9d2a55954d447554907686d59135489c393e826).
 > ACS 0.4 is alpha and Python Agent Hooks is experimental. This sample is a
 > controlled integration redesign, not a claim of drop-in compatibility.
@@ -284,7 +284,7 @@ def build_agent() -> Agent:
     )
 ```
 
-Source: [`src/helpdeskbot/main.py`, lines 16-30](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/main.py#L16-L30).
+Source: [`src/helpdeskbot/main.py`, lines 16-30](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/main.py#L16-L30).
 
 ```python
 result = super(SafeAgent, self).run(
@@ -295,7 +295,7 @@ result = super(SafeAgent, self).run(
 )
 ```
 
-Source: [`src/helpdeskbot/host_boundary.py`, lines 280-285](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L280-L285).
+Source: [`src/helpdeskbot/host_boundary.py`, lines 280-285](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L280-L285).
 
 
 ### Block 2: Enforce ACS decisions with Agent Framework middleware
@@ -321,7 +321,7 @@ ctx["target"] = call["args"]
 self.prior[call_id] = evidence_snapshot_for_call(call["name"], call["args"])
 ```
 
-Source: [`src/helpdeskbot/host_boundary.py`, lines 100-107](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L100-L107).
+Source: [`src/helpdeskbot/host_boundary.py`, lines 100-107](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L100-L107).
 
 
 ### Block 3: Enforce ACS decisions with Agent Framework middleware
@@ -353,7 +353,7 @@ if not ctx["tool_result"]["is_error"] and call["name"] != "create_escalation_tic
     ctx["tool_result"]["value"] = value
 ```
 
-Source: [`src/helpdeskbot/host_boundary.py`, lines 111-118](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L111-L118).
+Source: [`src/helpdeskbot/host_boundary.py`, lines 111-118](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L111-L118).
 
 
 ### Block 4: Enforce ACS decisions with Agent Framework middleware
@@ -384,7 +384,7 @@ except InterceptionBlocked as blocked:
     raise
 ```
 
-Source: [`src/helpdeskbot/host_boundary.py`, lines 131-140](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L131-L140).
+Source: [`src/helpdeskbot/host_boundary.py`, lines 131-140](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L131-L140).
 
 
 ### Block 5: Implement each SAFE principle
@@ -448,7 +448,7 @@ escalations := object.get(safe_snapshot, "escalations", [])
 case_id := lower(trim_space(object.get(args, "case_id", "")))
 ```
 
-Source: [`src/helpdeskbot/policies/helpdesk.rego`, lines 13-21](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/policies/helpdesk.rego#L13-L21).
+Source: [`src/helpdeskbot/policies/helpdesk.rego`, lines 13-21](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/policies/helpdesk.rego#L13-L21).
 
 
 ### Block 7: Scope: keep the agent within its allowed authority
@@ -543,7 +543,7 @@ unsigned = {
 unsigned["evidence_id"] = hashlib.sha256(_canonical_json(unsigned)).hexdigest()[:24]
 ```
 
-Source: [`src/helpdeskbot/evidence.py`, lines 123-134](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/evidence.py#L123-L134).
+Source: [`src/helpdeskbot/evidence.py`, lines 123-134](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/evidence.py#L123-L134).
 
 
 ### Block 11: Anchored Decisions: require host-verified decision evidence
@@ -569,7 +569,7 @@ def publish_evidence(token: str) -> str:
     return reference
 ```
 
-Source: [`src/helpdeskbot/evidence.py`, lines 142-147](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/evidence.py#L142-L147).
+Source: [`src/helpdeskbot/evidence.py`, lines 142-147](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/evidence.py#L142-L147).
 
 ```python
 def accept_result_evidence(token: str) -> str:
@@ -591,7 +591,7 @@ def accept_result_evidence(token: str) -> str:
     return evidence_reference
 ```
 
-Source: [`src/helpdeskbot/evidence.py`, lines 477-493](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/evidence.py#L477-L493).
+Source: [`src/helpdeskbot/evidence.py`, lines 477-493](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/evidence.py#L477-L493).
 
 
 ### Block 12: Anchored Decisions: require host-verified decision evidence
@@ -669,7 +669,7 @@ EXPECTED_INPUT_EVIDENCE = {
 }
 ```
 
-Source: [`src/helpdeskbot/evidence.py`, lines 33-52](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/evidence.py#L33-L52).
+Source: [`src/helpdeskbot/evidence.py`, lines 33-52](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/evidence.py#L33-L52).
 
 
 ### Block 15: Flow Integrity: require the diagnostic path before escalation
@@ -696,7 +696,7 @@ if (
     return _untrusted("flow_integrity_violation", case_id)
 ```
 
-Source: [`src/helpdeskbot/evidence.py`, lines 353-358](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/evidence.py#L353-L358).
+Source: [`src/helpdeskbot/evidence.py`, lines 353-358](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/evidence.py#L353-L358).
 
 
 ### Block 16: Flow Integrity: require the diagnostic path before escalation
@@ -788,7 +788,7 @@ async def process(self, context, call_next):
     context.result = response_stream(result) if context.stream else result
 ```
 
-Source: [`src/helpdeskbot/host_boundary.py`, lines 215-248](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L215-L248).
+Source: [`src/helpdeskbot/host_boundary.py`, lines 215-248](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L215-L248).
 
 ```python
 result = super(SafeAgent, self).run(
@@ -799,7 +799,7 @@ result = super(SafeAgent, self).run(
 )
 ```
 
-Source: [`src/helpdeskbot/host_boundary.py`, lines 280-285](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L280-L285).
+Source: [`src/helpdeskbot/host_boundary.py`, lines 280-285](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L280-L285).
 
 
 ### Block 19: Escalation: require the right handoff at the right time
@@ -877,7 +877,7 @@ async def handoff(self, builder, arguments):
     return result.target
 ```
 
-Source: [`src/helpdeskbot/host_boundary.py`, lines 174-196](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/src/helpdeskbot/host_boundary.py#L174-L196).
+Source: [`src/helpdeskbot/host_boundary.py`, lines 174-196](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/src/helpdeskbot/host_boundary.py#L174-L196).
 
 
 ### Block 21: Deploy and prove the SAFE controls
@@ -901,8 +901,8 @@ Replace the unversioned checkout/setup block with:
 ```bash
 git clone https://github.com/placerda/safe-agent-on-foundry safe-agent-acs04
 cd safe-agent-acs04
-git checkout --detach 7d0795dbe3aea94286a9e33f9978d7c40bec606a
-test "$(git rev-parse HEAD)" = 7d0795dbe3aea94286a9e33f9978d7c40bec606a
+git checkout --detach 0415a052b1ac86afe5608d4cc925a1ac13693c17
+test "$(git rev-parse HEAD)" = 0415a052b1ac86afe5608d4cc925a1ac13693c17
 
 az login
 azd auth login
@@ -1045,7 +1045,7 @@ and repeat the deterministic, protocol, concurrency, and hosted evaluation gates
 
 The six-query Foundry dataset stays beside `eval.yaml` in `src/helpdeskbot/`.
 The eight-case, four-dimension ASSERT suite stays in `evaluation/assert_suite/`.
-Use the updated [ASSERT instructions](https://github.com/placerda/safe-agent-on-foundry/blob/7d0795dbe3aea94286a9e33f9978d7c40bec606a/evaluation/assert_suite/README.md)
+Use the updated [ASSERT instructions](https://github.com/placerda/safe-agent-on-foundry/blob/0415a052b1ac86afe5608d4cc925a1ac13693c17/evaluation/assert_suite/README.md)
 for Entra authentication, a version-bound hosted session, explicit history replay,
 fresh inference rather than cached results, and fail-loud error behavior.
 
@@ -1069,7 +1069,7 @@ source links and figures.
 - Apply the original tutorial's required immutable link/version corrections.
 - Replace the affected prose, code blocks, captions, and artwork together for
   an ACS 0.4 rewrite.
-- Verify that every migrated GitHub URL uses `7d0795dbe3aea94286a9e33f9978d7c40bec606a` and the corrected range.
+- Verify that every migrated GitHub URL uses `0415a052b1ac86afe5608d4cc925a1ac13693c17` and the corrected range.
 - Verify the versioned checkout and its exact source identity.
 - Review the regression and hosted-validation evidence; keep deterministic
   control guarantees distinct from model-dependent evaluation scores.
