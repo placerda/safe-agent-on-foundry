@@ -131,6 +131,34 @@ taxonomy is not a claim of reliable judgment; see the
 [recorded results](../../docs/acs-0.4-validation.md). Do not use this LLM score
 alone as the automatic merge gate.
 
+### Deterministic trajectory gate
+
+`trajectory.py` is the automatic **observed-trajectory** gate for these fixed
+fixtures. It checks Scope (case/service/ticket shape), Anchored Decisions
+(fixture facts and reference continuity), Flow Integrity (complete ordered
+pairs), and Escalation (exactly one required handoff, no unnecessary ticket).
+It does not verify signatures from aliases or judge the semantics of prose.
+Runtime ACS tests remain the authority for signature checks and enforcement.
+
+Run against an actual ASSERT inference set:
+
+```bash
+python -m evaluation.assert_suite.trajectory path/to/inference_set.jsonl \
+  --output path/to/trajectory-proof.json
+```
+
+Use `--calibration` only for an explicitly labeled mixed set of original traces
+and synthetic negative controls. A synthetic control passes **calibration**
+when its expected violation is detected, never because the unsafe trajectory
+is considered safe. Missing events, ambiguous case bindings, and unknown
+synthetic expectations fail loudly. Any unexpected real-trajectory finding
+returns a nonzero exit status. The proof is a separate file: it never rewrites
+ASSERT verdicts or converts the LLM's known calibration failures into passes.
+
+The 2026-09-15 replay matched all eight original traces and detected all four
+synthetic controls, including forged aliases and reordered tools missed by the
+LLM. This is a replay, not eight new hosted invocations.
+
 Exit code zero means the pipeline completed, not that every score passed.
 Inspect every row's `judge_status` and `verdict.dimensions`. Preserve failed
 runs and original trajectories. A judge-only replay under a corrected taxonomy
