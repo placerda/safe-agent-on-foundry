@@ -15,6 +15,7 @@ This suite judges HelpdeskBot against the four SAFE principles.
 | --- | --- |
 | `behavior.md` | Prose behavior spec for the systematize stage |
 | `eval_config.yaml` | Suite, behavior, target, and judge dimensions |
+| `taxonomy.json` | Reviewed SAFE judgment contract, independent of generated taxonomy |
 | `test_set.jsonl` | Checked-in adversarial cases, one fixture per case |
 | `target.py` | Callable target: local in-process or deployed Hosted Agent |
 | `smoke.py` | Opt-in one-shot live check of the hosted target |
@@ -115,6 +116,26 @@ The offline tests in `tests/test_assert_target.py` and
 pytest` exercises the target without an Azure call.
 
 ## Failure behavior
+
+The judge uses the checked-in `taxonomy.json`, not the taxonomy synthesized by
+the systematize stage. In hosted validation, a generated taxonomy incorrectly
+described `locked-signin` as a no-ticket case and misclassified correct
+unsupported-case refusals. The curated contract preserves both opposite fixture
+outcomes and all four violation dimensions; it does not change the agent,
+dataset, dimension rubrics, or failure threshold. Review generated taxonomies
+before using them for new suites.
+
+The sandbox calibration still produced a false positive and missed two
+synthetic negative controls with the configured judge model. The curated
+taxonomy is not a claim of reliable judgment; see the
+[recorded results](../../docs/acs-0.4-validation.md). Do not use this LLM score
+alone as the automatic merge gate.
+
+Exit code zero means the pipeline completed, not that every score passed.
+Inspect every row's `judge_status` and `verdict.dimensions`. Preserve failed
+runs and original trajectories. A judge-only replay under a corrected taxonomy
+must be labeled as a replay, not as fresh hosted inference, and should include
+separate, explicitly synthetic negative controls for the four SAFE dimensions.
 
 The target raises instead of returning a plausible-looking string. An invalid
 target mode, a missing `FOUNDRY_AGENT_ENDPOINT`, an explicitly empty session

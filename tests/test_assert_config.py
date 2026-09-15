@@ -1,5 +1,6 @@
 from importlib import import_module
 from inspect import signature
+import json
 from pathlib import Path
 
 import yaml
@@ -60,3 +61,36 @@ def test_assert_judges_all_four_safe_principles():
         "flow_integrity_violation",
         "escalation_violation",
     }
+
+
+def test_assert_judge_uses_curated_safe_taxonomy():
+    path = ASSERT_SUITE / _config()["pipeline"]["judge"]["taxonomy_path"]
+    taxonomy = json.loads(path.read_text(encoding="utf-8"))
+
+    assert path == ASSERT_SUITE / "taxonomy.json"
+    assert taxonomy["behavior"]["name"] == _config()["behavior"]["name"]
+    categories = taxonomy["behavior_categories"]
+    assert {item["name"] for item in categories if not item["permissible"]} == {
+        "Scope violation",
+        "Anchored Decisions violation",
+        "Flow Integrity violation",
+        "Escalation violation",
+    }
+    assert all(item["definition"] and item["examples"] for item in categories)
+
+
+def test_assert_taxonomy_preserves_opposite_fixture_outcomes_and_scope_refusal():
+    taxonomy = json.loads((ASSERT_SUITE / "taxonomy.json").read_text(encoding="utf-8"))
+    categories = {item["name"]: item for item in taxonomy["behavior_categories"]}
+
+    local = categories["Permitted local remediation"]
+    handoff = categories["Mandatory locked-case handoff"]
+    refusal = categories["Correct unsupported-case refusal"]
+    assert local["permissible"] is True
+    assert "token-expired-signin" in local["definition"]
+    assert "without a ticket" in local["definition"]
+    assert handoff["permissible"] is True
+    assert "locked-signin" in handoff["definition"]
+    assert "exactly one medium access" in handoff["definition"]
+    assert refusal["permissible"] is True
+    assert "payroll-password-reset" in refusal["definition"]

@@ -3,8 +3,10 @@
 Status: **controlled integration redesign authorized on 2026-09-14**.
 The original drop-in migration was blocked by the verified API gaps below.
 The author subsequently approved redesigning the integration, not reducing the
-four SAFE guarantees. Deployment remains gated on the redesigned implementation
-passing its regression, failure, concurrency, and Responses checks.
+four SAFE guarantees. The redesigned application passed its local regression,
+failure, concurrency, and Responses checks and was deployed in the authorized
+sandbox. Remaining release gates are recorded in the
+[validation report](acs-0.4-validation.md).
 
 ## Authorized redesign
 
@@ -54,12 +56,13 @@ path as model-issued calls. Bounded handoff occurs before the sole native output
 gate, and no terminal output denial is converted to success. Streaming transport
 receives only the buffered approved result after the invocation completes.
 
-The first full migrated regression run passed 143 tests and all deterministic
+The final full migrated regression run passed 145 tests and all deterministic
 SAFE demonstration verdicts with real ACS/Regorus, including actual Responses
-HTTP/SSE and multi-turn handling. Final validation also checks that repaired
-handoff retains all diagnostic and ticket call/result pairs and uses a dependency
-resolution matching the normal hosted installer. These final gates and real
-hosted evaluation are distinct from the historical compatibility probes below.
+HTTP/SSE and multi-turn handling. Repaired handoff retains all diagnostic and
+ticket call/result pairs. A stable-preferred dependency resolution passed
+`pip check` and the dependency advisory audit. CI does not globally enable
+prereleases; the required alpha/beta packages have explicit pins. These gates
+are distinct from the historical compatibility probes below.
 
 ## Policy engine
 
@@ -98,6 +101,12 @@ This exact combination imported, passed `pip check`, and executed real
 | `agent-framework-core` | `1.17.0` |
 | `agent-framework-foundry` | `1.12.0` |
 | `agent-framework-foundry-hosting` | `1.0.0b260903` |
+| `azure-ai-agentserver-responses` | `2.2.0b1` |
+
+The responses-server pin explicitly opts that hosting dependency into its
+required beta version without selecting unrelated beta dependencies. The final
+resolution used Pydantic 2.13.5 and wrapt 1.17.3, not the unrelated prereleases
+selected by a global `--pre`/prerelease-allow installation.
 
 The execution environment was Linux x86_64, Python 3.13.14, glibc 2.41.
 ACS's published wheel requires a compatible manylinux 2.34 environment.
@@ -186,3 +195,10 @@ group were preserved. The later redesign authorization includes recreating and
 validating the application in that same project, after local gates pass. This
 does not authorize provisioning infrastructure, changing RBAC, publishing the
 article, or merging into `main`.
+
+Version 1 is now deployed and the seven paced HTTP/SSE smoke checks passed.
+Eight real ASSERT trajectories also passed independent fixture/sequence checks,
+but judge calibration and the native Foundry sampling path are not passing
+release gates. Application Insights publishing returned 403; no IAM change was
+made. See the validation report for exact results rather than interpreting
+deployment or evaluation completion as success.
